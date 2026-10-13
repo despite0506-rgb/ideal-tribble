@@ -1,0 +1,42 @@
+import { DEMO_STATE } from './demoData'
+import { validateState } from './domain'
+import type { AppState } from './types'
+
+export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
+
+const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
+
+export function loadState(): { state: AppState; warning: string | null } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { state: cloneDemo(), warning: null }
+    const parsed: unknown = JSON.parse(raw)
+    if (!validateState(parsed)) {
+      return {
+        state: cloneDemo(),
+        warning: '저장된 데이터 형식을 읽을 수 없어 예시 데이터로 열었습니다. 기존 데이터는 덮어쓰지 않았습니다.',
+      }
+    }
+    return { state: parsed, warning: null }
+  } catch {
+    return {
+      state: cloneDemo(),
+      warning: '저장된 데이터를 불러오지 못해 예시 데이터로 열었습니다.',
+    }
+  }
+}
+
+export function saveState(state: AppState): string | null {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    return null
+  } catch {
+    return '브라우저 저장 공간이 부족해 변경 내용을 저장하지 못했습니다.'
+  }
+}
+
+export function resetState(): AppState {
+  const state = cloneDemo()
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  return state
+}
