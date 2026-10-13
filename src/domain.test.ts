@@ -18,6 +18,8 @@ const student = (id: string, name = id): Student => ({
   grade: '',
   color: '#146c63',
   defaultTransport: { arrivalRide: false, departureRide: false },
+  notionUrl: '',
+  feedbacks: [],
   createdAt: '2026-01-01T00:00:00.000Z',
 })
 
@@ -29,7 +31,7 @@ const lesson = (
   weekday: Lesson['weekday'] = 1,
 ): Lesson => ({
   id,
-  kind: studentIds.length === 2 ? 'group' : 'individual',
+  kind: studentIds.length >= 2 ? 'group' : 'individual',
   weekday,
   startMinute,
   endMinute,
@@ -107,9 +109,10 @@ describe('수업 겹침', () => {
 })
 
 describe('그룹 수업 무결성', () => {
-  it('서로 다른 두 학생만 그룹으로 허용한다', () => {
+  it('서로 다른 학생을 2명 이상 선택한 그룹을 허용한다', () => {
     expect(validateLesson(lesson('group', ['a', 'b'], 700, 760), students, [])).toEqual([])
-    expect(validateLesson({ ...lesson('bad', ['a'], 700, 760), kind: 'group' }, students, []).join(' ')).toContain('2명')
+    expect(validateLesson(lesson('large-group', ['a', 'b', 'c'], 800, 860), students, [])).toEqual([])
+    expect(validateLesson({ ...lesson('bad', ['a'], 700, 760), kind: 'group' }, students, []).join(' ')).toContain('2명 이상')
     expect(validateLesson({ ...lesson('bad', ['a', 'a'], 700, 760), kind: 'group' }, students, []).join(' ')).toContain('두 번')
   })
 
@@ -118,7 +121,7 @@ describe('그룹 수업 무결성', () => {
     expect(validateLesson(lesson('group', ['a', 'b'], 720, 780), students, existing).join(' ')).toContain('겹칩니다')
   })
 
-  it('그룹 수업은 두 학생의 개인 시간표에 같은 id로 한 번씩 나타난다', () => {
+  it('그룹 수업은 참여 학생의 개인 시간표에 같은 id로 한 번씩 나타난다', () => {
     const group = lesson('group', ['a', 'b'], 700, 760)
     expect(lessonsForStudent([group], 'a').map((item) => item.id)).toEqual(['group'])
     expect(lessonsForStudent([group], 'b').map((item) => item.id)).toEqual(['group'])
@@ -172,6 +175,7 @@ describe('저장 데이터 검증', () => {
 
   it('정상 상태를 허용한다', () => {
     expect(validateState(validState)).toBe(true)
+    expect(validateState({ ...validState, lessons: [lesson('large-group', ['a', 'b', 'c'], 700, 760)] })).toBe(true)
   })
 
   it('연결이 끊긴 학생 참조와 중복 id를 거절한다', () => {

@@ -9,7 +9,7 @@ const student = (
   grade: string,
   color: string,
   defaultTransport: Transport,
-): Student => ({ id, name, school, grade, color, defaultTransport, createdAt })
+): Student => ({ id, name, school, grade, color, defaultTransport, notionUrl: '', feedbacks: [], createdAt })
 
 const participant = (
   studentId: string,
@@ -43,6 +43,7 @@ export const DEMO_STATE: AppState = {
     lesson('lesson-mon-group', 'group', 1, 16 * 60 + 10, 17 * 60, '수학 · 심화 그룹', [
       participant('student-minjun', true, false),
       participant('student-seoyun', false, true),
+      participant('student-jiho', true, true),
     ], '이번 주 오답 노트 확인'),
     lesson('lesson-tue-doyun', 'individual', 2, 15 * 60 + 10, 16 * 60 + 10, '과학 · 내신', [participant('student-doyun', true, true)]),
     lesson('lesson-tue-harin', 'individual', 2, 15 * 60 + 20, 16 * 60 + 20, '수학 · 연산', [participant('student-harin', false, false)]),

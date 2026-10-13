@@ -670,6 +670,24 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.academy-name-setting {
+  display: grid;
+  min-width: 150px;
+  gap: 5px;
+}
+
+.academy-name-setting input {
+  width: 170px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 680;
+}
+
 .settings-time-range .settings-label {
   margin-right: 3px;
 }
@@ -1423,6 +1441,323 @@ textarea:focus-visible {
   background: #fff;
 }
 
+.student-detail-page {
+  padding-top: 18px;
+}
+
+.detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 5px 2px;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.detail-back:hover {
+  color: var(--brand);
+}
+
+.student-detail-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.student-detail-profile,
+.student-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.student-detail-profile h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.student-detail-profile p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.button.notion-button {
+  border-color: #222;
+  color: #fff;
+  background: #222;
+  text-decoration: none;
+}
+
+.student-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr)) minmax(190px, 1.4fr);
+  overflow: hidden;
+  margin: 13px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.student-detail-stats > div {
+  display: flex;
+  min-height: 65px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px;
+}
+
+.student-detail-stats > div + div {
+  border-left: 1px solid var(--border);
+}
+
+.student-detail-stats strong {
+  font-size: 19px;
+}
+
+.student-detail-stats > div > span:not(.ride-pills) {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.student-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  align-items: start;
+  gap: 13px;
+}
+
+.detail-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.detail-card > header {
+  display: flex;
+  min-height: 59px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand);
+}
+
+.detail-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.detail-card > header > span {
+  color: var(--text-light);
+  font-size: 9px;
+}
+
+.student-lesson-list {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.student-lesson-list > button {
+  display: grid;
+  grid-template-columns: 35px minmax(120px, 1fr) auto auto 20px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-subtle);
+  cursor: pointer;
+  text-align: left;
+}
+
+.student-lesson-list > button:hover {
+  border-color: #abcac3;
+  background: var(--brand-soft);
+}
+
+.student-lesson-day {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--brand);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+.student-lesson-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.student-lesson-main strong,
+.student-lesson-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-lesson-main strong { font-size: 12px; }
+.student-lesson-main small { color: var(--text-muted); font-size: 9px; }
+
+.student-group-badge {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #65459c;
+  background: var(--purple-soft);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.copy-feedback {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: #fff;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.feedback-form {
+  display: grid;
+  grid-template-columns: 135px 1fr auto;
+  align-items: end;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.feedback-form input,
+.feedback-form textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text);
+  background: #fff;
+  font-size: 11px;
+}
+
+.feedback-form textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+
+.notion-connection {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 11px;
+  padding: 11px;
+  border: 1px dashed #c8d3cf;
+  border-radius: 9px;
+  color: #343b38;
+  background: #fafbfb;
+}
+
+.notion-connection > div {
+  display: grid;
+  gap: 3px;
+}
+
+.notion-connection strong { font-size: 10px; }
+.notion-connection span { color: var(--text-muted); font-size: 9px; line-height: 1.45; }
+
+.feedback-list {
+  display: grid;
+  gap: 8px;
+  max-height: 390px;
+  overflow-y: auto;
+  padding: 0 11px 11px;
+}
+
+.feedback-list article {
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.feedback-list article header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.feedback-list time {
+  color: var(--brand);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.feedback-list article button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-light);
+  background: transparent;
+  cursor: pointer;
+}
+
+.feedback-list article button:hover { color: var(--danger); background: var(--danger-soft); }
+.feedback-list p { margin: 7px 0 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+
+.detail-empty {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  color: var(--text-light);
+  font-size: 11px;
+}
+
+.detail-empty.compact { min-height: 90px; }
+
 .modal-backdrop {
   position: fixed;
   z-index: 100;
@@ -1520,6 +1855,23 @@ textarea:focus-visible {
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-icon > svg {
+  position: absolute;
+  z-index: 1;
+  left: 11px;
+  color: var(--text-light);
+}
+
+.field .input-with-icon input {
+  padding-left: 36px;
+}
+
 .field textarea {
   min-height: 82px;
   resize: vertical;
@@ -1547,7 +1899,8 @@ textarea:focus-visible {
 .color-field,
 .segmented-field,
 .transport-box,
-.participant-rides {
+.participant-rides,
+.group-student-picker {
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -1555,9 +1908,80 @@ textarea:focus-visible {
 }
 
 .color-field legend,
-.segmented-field legend {
+.segmented-field legend,
+.group-student-picker legend {
   margin-bottom: 8px;
 }
+
+.group-student-picker legend {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+}
+
+.group-student-picker legend em {
+  color: var(--text-light);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.group-student-picker legend strong {
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 10px;
+}
+
+.group-student-options {
+  display: grid;
+  max-height: 210px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.group-student-options label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.group-student-options label.selected {
+  border-color: #9dc8bf;
+  background: var(--brand-soft);
+}
+
+.group-student-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group-student-options label > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.group-student-options strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-student-options small { color: var(--text-muted); font-size: 8px; }
+.group-student-options label > svg { color: transparent; }
+.group-student-options label.selected > svg { color: var(--brand); }
 
 .color-options {
   display: flex;
@@ -1823,6 +2247,7 @@ textarea:focus-visible {
   .student-card-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 260px)); }
   .schedule-settings { flex-wrap: wrap; gap: 10px 16px; }
   .hidden-lessons-note { width: 100%; margin-left: 0; }
+  .student-detail-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -1936,6 +2361,19 @@ textarea:focus-visible {
   .lesson-list-card { min-height: 113px; }
   .student-card-grid { grid-template-columns: 1fr; }
   .students-page { padding-top: 14px; }
+  .student-detail-page { padding-top: 12px; }
+  .student-detail-hero { align-items: flex-start; flex-direction: column; padding: 15px; }
+  .student-detail-actions { width: 100%; flex-wrap: wrap; }
+  .student-detail-actions .button { flex: 1; }
+  .student-detail-stats { grid-template-columns: 1fr 1fr; }
+  .student-detail-stats > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--border); }
+  .student-detail-stats > div:nth-child(4) { border-top: 1px solid var(--border); }
+  .feedback-form { grid-template-columns: 1fr; }
+  .student-lesson-list > button { grid-template-columns: 35px minmax(0, 1fr) auto 18px; }
+  .student-lesson-list .ride-pills { display: none; }
+  .group-student-options { grid-template-columns: 1fr; }
+  .academy-name-setting { width: 100%; }
+  .academy-name-setting input { width: 100%; }
   .students-toolbar { margin-bottom: 11px; }
   .students-toolbar > span { display: none; }
   .student-card { padding: 15px; }

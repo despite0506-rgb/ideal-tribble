@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   ArrowDown,
   ArrowUp,
   BookOpen,
@@ -6,10 +7,14 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Copy,
+  ExternalLink,
   LayoutDashboard,
   List,
+  Link2,
   Maximize2,
   Minimize2,
+  MessageSquare,
   Pencil,
   Plus,
   RotateCcw,
@@ -36,9 +41,9 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, Lesson, LessonDraft, ScheduleSettings, Student, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, Transport, Weekday, WeekendMode } from './types'
 
-type View = 'schedule' | 'students'
+type View = 'schedule' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
 type Selection = 'all' | string
 
@@ -71,6 +76,16 @@ function initials(name: string): string {
 
 function transportText(transport: Transport): string {
   return `등원 ${transport.arrivalRide ? '이용' : '미이용'}, 하원 ${transport.departureRide ? '이용' : '미이용'}`
+}
+
+function isValidNotionUrl(value: string): boolean {
+  if (!value) return true
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && (url.hostname.endsWith('notion.so') || url.hostname.endsWith('notion.site'))
+  } catch {
+    return false
+  }
 }
 
 function studentById(students: Student[], id: string): Student | undefined {
@@ -136,7 +151,7 @@ function LessonCardContent({
         </span>
         <span className="lesson-card-badges">
           <LessonRideSummary lesson={lesson} />
-          {lesson.kind === 'group' && <span className="kind-badge">2인</span>}
+          {lesson.kind === 'group' && <span className="kind-badge">{lesson.participants.length}인</span>}
         </span>
       </div>
       <strong className="lesson-title">{lesson.label || '수업'}</strong>
@@ -164,7 +179,7 @@ function lessonAriaLabel(lesson: Lesson, students: Student[]): string {
     const student = studentById(students, participant.studentId)
     return `${student?.name ?? '학생'}, ${transportText(participant.transport)}`
   }).join(', ')
-  return `${day} ${minutesToTime(lesson.startMinute)}부터 ${minutesToTime(lesson.endMinute)}, ${lesson.label}, ${lesson.kind === 'group' ? '2인 그룹 수업' : '개인 수업'}, ${people}`
+  return `${day} ${minutesToTime(lesson.startMinute)}부터 ${minutesToTime(lesson.endMinute)}, ${lesson.label}, ${lesson.kind === 'group' ? `${lesson.participants.length}인 그룹 수업` : '개인 수업'}, ${people}`
 }
 
 function Timeline({
@@ -427,12 +442,17 @@ function StudentModal({
   const [grade, setGrade] = useState(student?.grade ?? '')
   const [color, setColor] = useState(student?.color ?? STUDENT_COLORS[0] ?? '#146c63')
   const [transport, setTransport] = useState<Transport>(student?.defaultTransport ?? { arrivalRide: false, departureRide: false })
+  const [notionUrl, setNotionUrl] = useState(student?.notionUrl ?? '')
   const [error, setError] = useState('')
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!name.trim()) {
       setError('학생 이름을 입력해 주세요.')
+      return
+    }
+    if (!isValidNotionUrl(notionUrl.trim())) {
+      setError('notion.so 또는 notion.site로 시작하는 올바른 Notion 페이지 주소를 입력해 주세요.')
       return
     }
     onSave({
@@ -442,6 +462,8 @@ function StudentModal({
       grade: grade.trim(),
       color,
       defaultTransport: transport,
+      notionUrl: notionUrl.trim(),
+      feedbacks: student?.feedbacks ?? [],
       createdAt: student?.createdAt ?? new Date().toISOString(),
     })
   }
@@ -489,6 +511,11 @@ function StudentModal({
             <Toggle label="등원차량 이용" checked={transport.arrivalRide} onChange={(arrivalRide) => setTransport((current) => ({ ...current, arrivalRide }))} />
             <Toggle label="하원차량 이용" checked={transport.departureRide} onChange={(departureRide) => setTransport((current) => ({ ...current, departureRide }))} />
           </fieldset>
+          <label className="field">
+            <span>Notion 학생 페이지 <small>선택</small></span>
+            <div className="input-with-icon"><Link2 size={16} aria-hidden="true" /><input type="url" value={notionUrl} onChange={(event) => setNotionUrl(event.target.value)} placeholder="https://www.notion.so/..." /></div>
+            <small>학생별 Notion 페이지 주소를 연결하면 상세 페이지에서 바로 열 수 있습니다.</small>
+          </label>
         </div>
         <footer className="modal-footer">
           {student && (
@@ -524,8 +551,8 @@ function LessonModal({
   onSave: (lesson: Lesson) => void
   onDelete: (lessonId: string) => void
 }) {
-  const defaultPrimary = lesson?.participants[0]?.studentId ?? presetStudentId ?? students[0]?.id ?? ''
-  const defaultSecondary = lesson?.participants[1]?.studentId ?? ''
+  const initialParticipantIds = lesson?.participants.map((participant) => participant.studentId)
+    ?? [presetStudentId ?? students[0]?.id ?? ''].filter(Boolean)
   const initialRides = Object.fromEntries(
     (lesson?.participants ?? []).map((participant) => [participant.studentId, participant.transport]),
   ) as Record<string, Transport>
@@ -535,8 +562,7 @@ function LessonModal({
   const [end, setEnd] = useState(minutesToTime(lesson?.endMinute ?? 15 * 60 + 50))
   const [label, setLabel] = useState(lesson?.label ?? '수학 · 정규')
   const [note, setNote] = useState(lesson?.note ?? '')
-  const [primaryId, setPrimaryId] = useState(defaultPrimary)
-  const [secondaryId, setSecondaryId] = useState(defaultSecondary)
+  const [participantIds, setParticipantIds] = useState<string[]>(initialParticipantIds)
   const [rides, setRides] = useState<Record<string, Transport>>(initialRides)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -547,8 +573,16 @@ function LessonModal({
     setRides((current) => ({ ...current, [studentId]: { ...rideFor(studentId), ...patch } }))
   }
 
-  const participantIds = kind === 'group' ? [primaryId, secondaryId].filter(Boolean) : [primaryId].filter(Boolean)
   const duration = timeToMinutes(end) - timeToMinutes(start)
+  const changeKind = (nextKind: Lesson['kind']) => {
+    setKind(nextKind)
+    if (nextKind === 'individual') setParticipantIds((current) => current.slice(0, 1))
+  }
+  const toggleParticipant = (studentId: string) => {
+    setParticipantIds((current) => current.includes(studentId)
+      ? current.filter((id) => id !== studentId)
+      : [...current, studentId])
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -587,32 +621,37 @@ function LessonModal({
           <fieldset className="segmented-field">
             <legend>수업 유형</legend>
             <div className="segmented-control">
-              <button type="button" className={kind === 'individual' ? 'active' : ''} onClick={() => setKind('individual')}>
+              <button type="button" className={kind === 'individual' ? 'active' : ''} onClick={() => changeKind('individual')}>
                 <UserRound size={17} /> 개인 수업
               </button>
-              <button type="button" className={kind === 'group' ? 'active' : ''} onClick={() => setKind('group')}>
-                <UsersRound size={17} /> 2인 그룹
+              <button type="button" className={kind === 'group' ? 'active' : ''} onClick={() => changeKind('group')}>
+                <UsersRound size={17} /> 그룹 수업
               </button>
             </div>
           </fieldset>
-          <div className="field-row">
+          {kind === 'individual' ? (
             <label className="field">
-              <span>{kind === 'group' ? '첫 번째 학생' : '학생'} <em>필수</em></span>
-              <select value={primaryId} onChange={(event) => setPrimaryId(event.target.value)}>
+              <span>학생 <em>필수</em></span>
+              <select value={participantIds[0] ?? ''} onChange={(event) => setParticipantIds(event.target.value ? [event.target.value] : [])}>
                 <option value="">학생 선택</option>
                 {students.map((student) => <option value={student.id} key={student.id}>{student.name} · {student.grade}</option>)}
               </select>
             </label>
-            {kind === 'group' && (
-              <label className="field">
-                <span>두 번째 학생 <em>필수</em></span>
-                <select value={secondaryId} onChange={(event) => setSecondaryId(event.target.value)}>
-                  <option value="">학생 선택</option>
-                  {students.map((student) => <option value={student.id} key={student.id} disabled={student.id === primaryId}>{student.name} · {student.grade}</option>)}
-                </select>
-              </label>
-            )}
-          </div>
+          ) : (
+            <fieldset className="group-student-picker">
+              <legend>참여 학생 <em>2명 이상 · 인원 제한 없음</em><strong>{participantIds.length}명 선택</strong></legend>
+              <div className="group-student-options">
+                {students.map((student) => (
+                  <label className={participantIds.includes(student.id) ? 'selected' : ''} key={student.id}>
+                    <input type="checkbox" checked={participantIds.includes(student.id)} onChange={() => toggleParticipant(student.id)} />
+                    <Avatar student={student} size="sm" />
+                    <span><strong>{student.name}</strong><small>{student.grade || '학년 미등록'}</small></span>
+                    <Check size={15} aria-hidden="true" />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <label className="field">
             <span>수업 이름 <em>필수</em></span>
             <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 수학 · 심화" />
@@ -679,12 +718,159 @@ function LessonModal({
   )
 }
 
+function StudentDetail({
+  student,
+  lessons,
+  allStudents,
+  onBack,
+  onEdit,
+  onAddLesson,
+  onOpenLesson,
+  onAddFeedback,
+  onDeleteFeedback,
+  onNotice,
+}: {
+  student: Student
+  lessons: Lesson[]
+  allStudents: Student[]
+  onBack: () => void
+  onEdit: () => void
+  onAddLesson: () => void
+  onOpenLesson: (lessonId: string) => void
+  onAddFeedback: (feedback: FeedbackEntry) => void
+  onDeleteFeedback: (feedbackId: string) => void
+  onNotice: (message: string) => void
+}) {
+  const [feedbackDate, setFeedbackDate] = useState(new Date().toISOString().slice(0, 10))
+  const [feedbackContent, setFeedbackContent] = useState('')
+  const feedbacks = [...student.feedbacks].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+  const groupLessons = lessons.filter((lesson) => lesson.kind === 'group')
+
+  const submitFeedback = (event: FormEvent) => {
+    event.preventDefault()
+    if (!feedbackContent.trim()) {
+      onNotice('피드백 내용을 입력해 주세요.')
+      return
+    }
+    onAddFeedback({
+      id: createId('feedback'),
+      date: feedbackDate,
+      content: feedbackContent.trim(),
+      createdAt: new Date().toISOString(),
+    })
+    setFeedbackContent('')
+  }
+
+  const copyFeedbacks = async () => {
+    if (feedbacks.length === 0) {
+      onNotice('복사할 피드백이 없습니다.')
+      return
+    }
+    const markdown = [
+      `# ${student.name} 피드백`,
+      '',
+      ...feedbacks.flatMap((feedback) => [`## ${feedback.date}`, feedback.content, '']),
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(markdown)
+      onNotice('Notion에 붙여넣을 피드백을 복사했습니다.')
+    } catch {
+      onNotice('브라우저에서 복사를 허용하지 않았습니다.')
+    }
+  }
+
+  return (
+    <section className="student-detail-page">
+      <button type="button" className="detail-back" onClick={onBack}><ArrowLeft size={16} /> 학생 목록</button>
+      <div className="student-detail-hero">
+        <div className="student-detail-profile">
+          <Avatar student={student} size="lg" />
+          <div>
+            <span className="eyebrow">STUDENT PAGE</span>
+            <h2>{student.name}</h2>
+            <p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'}</p>
+          </div>
+        </div>
+        <div className="student-detail-actions">
+          {student.notionUrl && <a className="button notion-button" href={student.notionUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Notion 열기</a>}
+          <button type="button" className="button secondary" onClick={onEdit}><Pencil size={15} /> 정보 수정</button>
+          <button type="button" className="button primary" onClick={onAddLesson}><Plus size={15} /> 수업 추가</button>
+        </div>
+      </div>
+
+      <div className="student-detail-stats">
+        <div><strong>{lessons.length}</strong><span>주간 수업</span></div>
+        <div><strong>{groupLessons.length}</strong><span>그룹 수업</span></div>
+        <div><strong>{feedbacks.length}</strong><span>피드백 기록</span></div>
+        <div><RidePills transport={student.defaultTransport} /></div>
+      </div>
+
+      <div className="student-detail-layout">
+        <section className="detail-card student-schedule-card">
+          <header><div><CalendarDays size={18} /><h3>개인 시간표</h3></div><span>그룹 수업도 함께 표시됩니다.</span></header>
+          {lessons.length === 0 ? (
+            <div className="detail-empty">등록된 수업이 없습니다.</div>
+          ) : (
+            <div className="student-lesson-list">
+              {lessons.map((lesson) => {
+                const participant = lesson.participants.find((item) => item.studentId === student.id)
+                const people = lesson.participants
+                  .map((item) => studentById(allStudents, item.studentId)?.name)
+                  .filter(Boolean)
+                  .join(' · ')
+                return (
+                  <button type="button" key={lesson.id} onClick={() => onOpenLesson(lesson.id)}>
+                    <span className="student-lesson-day">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.short}</span>
+                    <span className="student-lesson-main"><strong>{lesson.label}</strong><small>{minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)} · {people}</small></span>
+                    {lesson.kind === 'group' && <span className="student-group-badge">그룹 {lesson.participants.length}인</span>}
+                    {participant && <RidePills transport={participant.transport} compact />}
+                    <Pencil size={14} aria-hidden="true" />
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="detail-card feedback-card">
+          <header>
+            <div><MessageSquare size={18} /><h3>피드백 기록</h3></div>
+            <button type="button" className="copy-feedback" onClick={copyFeedbacks}><Copy size={14} /> Notion용 복사</button>
+          </header>
+          <form className="feedback-form" onSubmit={submitFeedback}>
+            <input type="date" value={feedbackDate} onChange={(event) => setFeedbackDate(event.target.value)} aria-label="피드백 날짜" />
+            <textarea value={feedbackContent} onChange={(event) => setFeedbackContent(event.target.value)} placeholder="수업 태도, 진도, 숙제 등 피드백을 기록하세요." rows={3} />
+            <button type="submit" className="button primary">기록 저장</button>
+          </form>
+          <div className="notion-connection">
+            <Link2 size={16} />
+            <div><strong>{student.notionUrl ? 'Notion 페이지 연결됨' : 'Notion 페이지를 연결하세요'}</strong><span>{student.notionUrl ? '복사한 피드백을 연결된 학생 페이지에 붙여넣을 수 있습니다.' : '학생 정보 수정에서 Notion 페이지 주소를 입력할 수 있습니다.'}</span></div>
+          </div>
+          {feedbacks.length === 0 ? (
+            <div className="detail-empty compact">아직 기록한 피드백이 없습니다.</div>
+          ) : (
+            <div className="feedback-list">
+              {feedbacks.map((feedback) => (
+                <article key={feedback.id}>
+                  <header><time dateTime={feedback.date}>{feedback.date}</time><button type="button" onClick={() => onDeleteFeedback(feedback.id)} aria-label={`${feedback.date} 피드백 삭제`}><Trash2 size={14} /></button></header>
+                  <p>{feedback.content}</p>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </section>
+  )
+}
+
 export default function App() {
   const initial = useMemo(() => loadState(), [])
   const [appState, setAppState] = useState<AppState>(initial.state)
   const [storageEnabled, setStorageEnabled] = useState(!initial.warning)
   const [storageWarning, setStorageWarning] = useState(initial.warning)
   const [view, setView] = useState<View>('schedule')
+  const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
   const [studentPageQuery, setStudentPageQuery] = useState('')
@@ -711,6 +897,7 @@ export default function App() {
 
   useEffect(() => {
     saveScheduleSettings(scheduleSettings)
+    document.title = `${scheduleSettings.academyName} · 학원 시간표`
     const availableColumns = getScheduleColumns(scheduleSettings.weekendMode)
     if (!availableColumns.some((column) => column.weekdays.includes(selectedDay))) {
       setSelectedDay(availableColumns[0]?.weekdays[0] ?? 1)
@@ -740,6 +927,7 @@ export default function App() {
     return !normalized || `${student.name} ${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalized)
   })
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
+  const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
   const visibleLessons = selectedStudent ? lessonsForStudent(appState.lessons, selectedStudent.id) : appState.lessons
   const displayedWeekdays = getScheduleColumns(scheduleSettings.weekendMode).flatMap((column) => column.weekdays)
   const outsideDisplayCount = visibleLessons.filter((lesson) => (
@@ -775,7 +963,7 @@ export default function App() {
   }
 
   const deleteLesson = (lessonId: string) => {
-    if (!window.confirm('이 수업을 삭제할까요? 그룹 수업은 두 학생의 시간표에서 함께 삭제됩니다.')) return
+    if (!window.confirm('이 수업을 삭제할까요? 그룹 수업은 모든 참여 학생의 시간표에서 함께 삭제됩니다.')) return
     setAppState((current) => ({ ...current, lessons: current.lessons.filter((lesson) => lesson.id !== lessonId) }))
     setLessonModal({ open: false })
     setNotice('수업을 삭제했습니다.')
@@ -801,6 +989,10 @@ export default function App() {
       lessons: current.lessons.filter((lesson) => !lesson.participants.some((participant) => participant.studentId === studentId)),
     }))
     if (selectedStudentId === studentId) setSelectedStudentId('all')
+    if (detailStudentId === studentId) {
+      setDetailStudentId(null)
+      setView('students')
+    }
     setStudentModal({ open: false })
     setNotice('학생과 연결된 수업을 삭제했습니다.')
   }
@@ -811,12 +1003,40 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const showStudentDetail = (studentId: string) => {
+    setDetailStudentId(studentId)
+    setView('student')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const addFeedback = (studentId: string, feedback: FeedbackEntry) => {
+    setAppState((current) => ({
+      ...current,
+      students: current.students.map((student) => student.id === studentId
+        ? { ...student, feedbacks: [feedback, ...student.feedbacks] }
+        : student),
+    }))
+    setNotice('피드백을 학생 페이지에 저장했습니다.')
+  }
+
+  const deleteFeedback = (studentId: string, feedbackId: string) => {
+    if (!window.confirm('이 피드백 기록을 삭제할까요?')) return
+    setAppState((current) => ({
+      ...current,
+      students: current.students.map((student) => student.id === studentId
+        ? { ...student, feedbacks: student.feedbacks.filter((feedback) => feedback.id !== feedbackId) }
+        : student),
+    }))
+    setNotice('피드백 기록을 삭제했습니다.')
+  }
+
   const handleReset = () => {
     if (!window.confirm('모든 변경 내용을 지우고 처음 예시 데이터로 되돌릴까요?')) return
     setAppState(resetState())
     setStorageEnabled(true)
     setStorageWarning(null)
     setSelectedStudentId('all')
+    setDetailStudentId(null)
     setNotice('예시 데이터로 초기화했습니다.')
   }
 
@@ -831,8 +1051,8 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">온</span>
-          <div><strong>온길</strong><small>Academy Planner</small></div>
+          <span className="brand-mark">{scheduleSettings.academyName.trim().slice(0, 1) || '학'}</span>
+          <div><strong>{scheduleSettings.academyName}</strong><small>Academy Planner</small></div>
         </div>
         <nav className="main-nav" aria-label="주 메뉴">
           <button type="button" className={view === 'schedule' ? 'active' : ''} onClick={() => setView('schedule')}>
@@ -885,15 +1105,15 @@ export default function App() {
 
       <main className="main-content">
         <header className="topbar">
-          <div className="mobile-brand"><span>온</span><strong>온길</strong></div>
+          <div className="mobile-brand"><span>{scheduleSettings.academyName.trim().slice(0, 1) || '학'}</span><strong>{scheduleSettings.academyName}</strong></div>
           <div className="topbar-title">
             <span className="eyebrow">ACADEMY SCHEDULE</span>
-            <h1>{view === 'schedule' ? (selectedStudent ? `${selectedStudent.name} 시간표` : '전체 시간표') : '학생 관리'}</h1>
-            <p>{view === 'schedule' ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
+            <h1>{view === 'schedule' ? (selectedStudent ? `${selectedStudent.name} 시간표` : '전체 시간표') : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
+            <p>{view === 'schedule' ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
           </div>
-          <button type="button" className="button primary top-add" onClick={() => view === 'schedule' ? openNewLesson() : setStudentModal({ open: true })}>
-            {view === 'schedule' ? <CalendarDays size={17} /> : <UserPlus size={17} />}
-            {view === 'schedule' ? '수업 추가' : '학생 추가'}
+          <button type="button" className="button primary top-add" onClick={() => view === 'students' ? setStudentModal({ open: true }) : openNewLesson(undefined, view === 'student' ? detailStudent?.id : undefined)}>
+            {view === 'students' ? <UserPlus size={17} /> : <CalendarDays size={17} />}
+            {view === 'students' ? '학생 추가' : '수업 추가'}
           </button>
         </header>
 
@@ -914,7 +1134,7 @@ export default function App() {
             <section className="stats-grid" aria-label="오늘의 요약">
               <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
               <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
-              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={appState.lessons.filter((lesson) => lesson.kind === 'group').length} hint="주간 2인 수업" tone="purple" />
+              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={appState.lessons.filter((lesson) => lesson.kind === 'group').length} hint="주간 그룹 일정" tone="purple" />
               <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
             </section>
 
@@ -956,6 +1176,16 @@ export default function App() {
               </header>
               {settingsOpen && (
                 <div className="schedule-settings" aria-label="시간표 표시 설정">
+                  <label className="academy-name-setting">
+                    <span className="settings-label">학원 이름</span>
+                    <input
+                      value={scheduleSettings.academyName}
+                      maxLength={24}
+                      onChange={(event) => setScheduleSettings((current) => ({ ...current, academyName: event.target.value }))}
+                      onBlur={() => setScheduleSettings((current) => ({ ...current, academyName: current.academyName.trim() || '우리 학원' }))}
+                      aria-label="학원 이름"
+                    />
+                  </label>
                   <div className="settings-time-range">
                     <span className="settings-label">보이는 시간</span>
                     <label>
@@ -1028,7 +1258,7 @@ export default function App() {
               )}
             </section>
           </>
-        ) : (
+        ) : view === 'students' ? (
           <section className="students-page">
             <div className="students-toolbar">
               <label className="page-search"><Search size={17} /><input value={studentPageQuery} onChange={(event) => setStudentPageQuery(event.target.value)} placeholder="이름, 학교, 학년으로 검색" aria-label="학생 목록 검색" /></label>
@@ -1062,7 +1292,7 @@ export default function App() {
                       </div>
                       <footer>
                         <button type="button" className="button secondary" onClick={() => openNewLesson(undefined, student.id)}><Plus size={15} /> 수업 추가</button>
-                        <button type="button" className="button text-button" onClick={() => showStudentSchedule(student.id)}>시간표 보기 <span>→</span></button>
+                        <button type="button" className="button text-button" onClick={() => showStudentDetail(student.id)}>학생 페이지 <span>→</span></button>
                       </footer>
                     </article>
                   )
@@ -1070,13 +1300,28 @@ export default function App() {
               </div>
             )}
           </section>
+        ) : detailStudent ? (
+          <StudentDetail
+            student={detailStudent}
+            lessons={lessonsForStudent(appState.lessons, detailStudent.id)}
+            allStudents={appState.students}
+            onBack={() => setView('students')}
+            onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
+            onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
+            onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })}
+            onAddFeedback={(feedback) => addFeedback(detailStudent.id, feedback)}
+            onDeleteFeedback={(feedbackId) => deleteFeedback(detailStudent.id, feedbackId)}
+            onNotice={setNotice}
+          />
+        ) : (
+          <div className="empty-state"><h3>학생 정보를 찾을 수 없습니다.</h3><button type="button" className="button primary" onClick={() => setView('students')}>학생 목록으로</button></div>
         )}
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="모바일 메뉴">
         <button type="button" className={view === 'schedule' ? 'active' : ''} onClick={() => setView('schedule')}><CalendarDays size={20} /><span>시간표</span></button>
-        <button type="button" className="mobile-add" onClick={() => view === 'schedule' ? openNewLesson(selectedDay) : setStudentModal({ open: true })}><Plus size={23} /><span>추가</span></button>
-        <button type="button" className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
+        <button type="button" className="mobile-add" onClick={() => view === 'schedule' ? openNewLesson(selectedDay) : view === 'student' ? openNewLesson(undefined, detailStudent?.id) : setStudentModal({ open: true })}><Plus size={23} /><span>추가</span></button>
+        <button type="button" className={view === 'students' || view === 'student' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
       </nav>
 
       {lessonModal.open && (

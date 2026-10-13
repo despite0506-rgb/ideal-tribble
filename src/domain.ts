@@ -111,7 +111,7 @@ export function validateLesson(
 ): string[] {
   const errors: string[] = []
   const ids = draft.participants.map((participant) => participant.studentId)
-  const expectedCount = draft.kind === 'group' ? 2 : 1
+  const hasValidParticipantCount = draft.kind === 'group' ? ids.length >= 2 : ids.length === 1
 
   if (!Number.isInteger(draft.weekday) || draft.weekday < 1 || draft.weekday > 7) {
     errors.push('요일을 선택해 주세요.')
@@ -123,8 +123,8 @@ export function validateLesson(
   } else if (draft.startMinute % 10 !== 0 || draft.endMinute % 10 !== 0) {
     errors.push('수업 시간은 10분 단위로 설정해 주세요.')
   }
-  if (ids.length !== expectedCount) {
-    errors.push(draft.kind === 'group' ? '그룹 수업은 서로 다른 학생 2명을 선택해야 합니다.' : '개인 수업은 학생 1명을 선택해야 합니다.')
+  if (!hasValidParticipantCount) {
+    errors.push(draft.kind === 'group' ? '그룹 수업은 서로 다른 학생을 2명 이상 선택해야 합니다.' : '개인 수업은 학생 1명을 선택해야 합니다.')
   }
   if (new Set(ids).size !== ids.length) {
     errors.push('같은 학생을 두 번 선택할 수 없습니다.')
@@ -216,9 +216,10 @@ export function validateState(value: unknown): value is AppState {
     if (typeof lesson.id !== 'string' || lessonIds.has(lesson.id)) return false
     lessonIds.add(lesson.id)
     if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
-    const expected = lesson.kind === 'group' ? 2 : 1
-    if (!Array.isArray(lesson.participants) || lesson.participants.length !== expected) return false
-    if (new Set(lesson.participants.map((participant) => participant.studentId)).size !== expected) return false
+    if (!Array.isArray(lesson.participants)) return false
+    if (lesson.kind === 'individual' && lesson.participants.length !== 1) return false
+    if (lesson.kind === 'group' && lesson.participants.length < 2) return false
+    if (new Set(lesson.participants.map((participant) => participant.studentId)).size !== lesson.participants.length) return false
     if (lesson.participants.some((participant) => !studentIds.has(participant.studentId))) return false
     if (!Number.isInteger(lesson.weekday) || lesson.weekday < 1 || lesson.weekday > 7) return false
     if (!Number.isInteger(lesson.startMinute) || !Number.isInteger(lesson.endMinute)) return false

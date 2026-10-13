@@ -5,6 +5,13 @@ export type Transport = {
   departureRide: boolean
 }
 
+export type FeedbackEntry = {
+  id: string
+  date: string
+  content: string
+  createdAt: string
+}
+
 export type Student = {
   id: string
   name: string
@@ -12,6 +19,8 @@ export type Student = {
   grade: string
   color: string
   defaultTransport: Transport
+  notionUrl: string
+  feedbacks: FeedbackEntry[]
   createdAt: string
 }
 
@@ -41,6 +50,7 @@ export type AppState = {
 export type WeekendMode = 'hidden' | 'combined' | 'separate'
 
 export type ScheduleSettings = {
+  academyName: string
   startMinute: number
   endMinute: number
   weekendMode: WeekendMode

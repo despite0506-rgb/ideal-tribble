@@ -6,12 +6,22 @@ export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
 export const SETTINGS_STORAGE_KEY = 'ideal-tribble:schedule-settings:v1'
 
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
+  academyName: '우리 학원',
   startMinute: 13 * 60,
   endMinute: 22 * 60,
   weekendMode: 'hidden',
 }
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
+
+const normalizeState = (state: AppState): AppState => ({
+  ...state,
+  students: state.students.map((student) => ({
+    ...student,
+    notionUrl: typeof student.notionUrl === 'string' ? student.notionUrl : '',
+    feedbacks: Array.isArray(student.feedbacks) ? student.feedbacks : [],
+  })),
+})
 
 export function loadState(): { state: AppState; warning: string | null } {
   try {
@@ -24,7 +34,7 @@ export function loadState(): { state: AppState; warning: string | null } {
         warning: '저장된 데이터 형식을 읽을 수 없어 예시 데이터로 열었습니다. 기존 데이터는 덮어쓰지 않았습니다.',
       }
     }
-    return { state: parsed, warning: null }
+    return { state: normalizeState(parsed), warning: null }
   } catch {
     return {
       state: cloneDemo(),
@@ -60,7 +70,14 @@ export function loadScheduleSettings(): ScheduleSettings {
       && Number(value.endMinute) <= 1440
       && Number(value.startMinute) < Number(value.endMinute)
     if (!validWeekendMode || !validTimes) return DEFAULT_SCHEDULE_SETTINGS
-    return value as ScheduleSettings
+    return {
+      academyName: typeof value.academyName === 'string' && value.academyName.trim()
+        ? value.academyName.trim()
+        : DEFAULT_SCHEDULE_SETTINGS.academyName,
+      startMinute: Number(value.startMinute),
+      endMinute: Number(value.endMinute),
+      weekendMode: value.weekendMode,
+    } as ScheduleSettings
   } catch {
     return DEFAULT_SCHEDULE_SETTINGS
   }
