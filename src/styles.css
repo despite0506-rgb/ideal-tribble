@@ -50,6 +50,10 @@ body.modal-open {
   overflow: hidden;
 }
 
+body.schedule-fullscreen-open {
+  overflow: hidden;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -570,6 +574,27 @@ textarea:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
+.schedule-panel.is-fullscreen {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  height: 100dvh;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.schedule-panel.is-fullscreen .panel-toolbar {
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(12px);
+}
+
+.schedule-panel.is-fullscreen .timeline-shell {
+  min-width: max(100%, var(--timeline-min-width));
+}
+
 .panel-toolbar {
   display: flex;
   min-height: 78px;
@@ -864,6 +889,11 @@ textarea:focus-visible {
   transform: translateY(-50%);
 }
 
+.time-axis span.is-half-hour {
+  color: #a1aca7;
+  font-size: 8px;
+}
+
 .days-grid {
   display: grid;
   height: 100%;
@@ -885,7 +915,7 @@ textarea:focus-visible {
   background: rgba(230, 243, 240, 0.23);
 }
 
-.hour-line {
+.time-grid-line {
   position: absolute;
   right: 0;
   left: 0;
@@ -894,14 +924,8 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
-.hour-line::after {
-  position: absolute;
-  top: 31.5px;
-  right: 0;
-  left: 0;
-  height: 1px;
+.time-grid-line.is-half-hour {
   background: rgba(232, 238, 235, 0.52);
-  content: "";
 }
 
 .lesson-card {
@@ -1868,6 +1892,8 @@ textarea:focus-visible {
   .panel-toolbar { min-height: 66px; padding: 11px 13px; }
   .panel-toolbar h2 { font-size: 14px; }
   .panel-toolbar p { font-size: 10px; }
+  .schedule-settings-button span { display: none; }
+  .schedule-settings-button { width: 36px; padding: 0; justify-content: center; }
   .toolbar-actions > .ride-pills,
   .view-switch { display: none; }
   .desktop-schedule { display: none; }

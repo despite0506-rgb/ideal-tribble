@@ -8,6 +8,8 @@ import {
   Clock3,
   LayoutDashboard,
   List,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   RotateCcw,
@@ -184,7 +186,7 @@ function Timeline({
   const start = settings.startMinute
   const end = settings.endMinute
   const height = (end - start) * PIXELS_PER_MINUTE
-  const hours = Array.from({ length: Math.floor((end - start) / 60) + 1 }, (_, index) => start + index * 60)
+  const timeTicks = Array.from({ length: Math.floor((end - start) / 30) + 1 }, (_, index) => start + index * 30)
   const today = getTodayWeekday()
   const gridStyle = {
     '--day-count': columns.length,
@@ -210,8 +212,8 @@ function Timeline({
       </div>
       <div className="timeline-body" style={{ height }}>
         <div className="time-axis">
-          {hours.map((minute) => (
-            <span key={minute} style={{ top: (minute - start) * PIXELS_PER_MINUTE }}>
+          {timeTicks.map((minute) => (
+            <span className={minute % 60 === 0 ? 'is-hour' : 'is-half-hour'} key={minute} style={{ top: (minute - start) * PIXELS_PER_MINUTE }}>
               {minutesToTime(minute)}
             </span>
           ))}
@@ -225,9 +227,9 @@ function Timeline({
             )))
             return (
               <div className={`day-column${column.weekdays.includes(today) ? ' is-today' : ''}`} key={column.key}>
-                {hours.slice(0, -1).map((minute) => (
+                {timeTicks.slice(0, -1).map((minute) => (
                   <span
-                    className="hour-line"
+                    className={`time-grid-line${minute % 60 === 0 ? ' is-hour' : ' is-half-hour'}`}
                     key={minute}
                     style={{ top: (minute - start) * PIXELS_PER_MINUTE }}
                     aria-hidden="true"
@@ -690,6 +692,7 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState<Weekday>(getTodayWeekday())
   const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(() => loadScheduleSettings())
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [scheduleFullscreen, setScheduleFullscreen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [notice, setNotice] = useState('')
@@ -715,6 +718,18 @@ export default function App() {
       setSelectedDay(6)
     }
   }, [scheduleSettings, selectedDay])
+
+  useEffect(() => {
+    document.body.classList.toggle('schedule-fullscreen-open', scheduleFullscreen)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setScheduleFullscreen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.classList.remove('schedule-fullscreen-open')
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [scheduleFullscreen])
 
   const filteredStudents = appState.students.filter((student) => {
     const normalized = studentQuery.trim().toLocaleLowerCase('ko')
@@ -903,7 +918,7 @@ export default function App() {
               <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
             </section>
 
-            <section className="schedule-panel">
+            <section className={`schedule-panel${scheduleFullscreen ? ' is-fullscreen' : ''}`}>
               <header className="panel-toolbar">
                 <div>
                   <h2>{selectedStudent ? `${selectedStudent.name}의 주간 시간표` : '주간 수업 현황'}</h2>
@@ -921,7 +936,17 @@ export default function App() {
                     onClick={() => setSettingsOpen((open) => !open)}
                     aria-expanded={settingsOpen}
                   >
-                    <Settings2 size={15} /> 표시 설정
+                    <Settings2 size={15} /> <span>표시 설정</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="schedule-settings-button fullscreen-button"
+                    onClick={() => setScheduleFullscreen((fullscreen) => !fullscreen)}
+                    aria-pressed={scheduleFullscreen}
+                    title={scheduleFullscreen ? '전체화면 나가기 (Esc)' : '시간표 전체화면으로 보기'}
+                  >
+                    {scheduleFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    <span>{scheduleFullscreen ? '나가기' : '전체화면'}</span>
                   </button>
                   <div className="view-switch" aria-label="보기 방식">
                     <button type="button" className={scheduleDisplay === 'timeline' ? 'active' : ''} onClick={() => setScheduleDisplay('timeline')} aria-label="시간표 보기"><CalendarDays size={16} /> 시간표</button>
