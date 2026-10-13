@@ -199,6 +199,28 @@ export function getTodayWeekday(date = new Date()): Weekday {
   return (day === 0 ? 7 : day) as Weekday
 }
 
+export function getStudentGradeGroup(student: Pick<Student, 'school' | 'grade'>): string {
+  const grade = student.grade.trim()
+  if (!grade) return '학년 미등록'
+  const compact = grade.replace(/\s+/g, '')
+  const explicit = /^(초|중|고)(?:등학교)?([1-6])(?:학년)?$/.exec(compact)
+  if (explicit) return `${explicit[1]}${explicit[2]}`
+  const number = /([1-6])\s*학년/.exec(grade)?.[1]
+  if (!number) return grade
+  const school = student.school.replace(/\s+/g, '')
+  if (school.includes('초')) return `초${number}`
+  if (school.includes('중')) return `중${number}`
+  if (school.includes('고')) return `고${number}`
+  return `${number}학년`
+}
+
+export function gradeGroupSortValue(label: string): number {
+  const match = /^(초|중|고)([1-6])$/.exec(label)
+  if (!match) return label === '학년 미등록' ? 999 : 900
+  const base = match[1] === '초' ? 0 : match[1] === '중' ? 100 : 200
+  return base + Number(match[2])
+}
+
 export function validateState(value: unknown): value is AppState {
   if (!value || typeof value !== 'object') return false
   const state = value as Partial<AppState>

@@ -32,6 +32,8 @@ import {
   WEEKDAYS,
   createId,
   formatDuration,
+  getStudentGradeGroup,
+  gradeGroupSortValue,
   getScheduleColumns,
   getTodayWeekday,
   layoutLessons,
@@ -384,6 +386,53 @@ function StatCard({ icon, label, value, hint, tone }: { icon: React.ReactNode; l
         <small>{hint}</small>
       </div>
     </article>
+  )
+}
+
+function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; onOpenStudent: (studentId: string) => void }) {
+  const groups = useMemo(() => {
+    const grouped = new Map<string, Student[]>()
+    students.forEach((student) => {
+      const label = getStudentGradeGroup(student)
+      grouped.set(label, [...(grouped.get(label) ?? []), student])
+    })
+    return [...grouped.entries()]
+      .map(([label, groupStudents]) => ({
+        label,
+        students: groupStudents.sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+      }))
+      .sort((a, b) => gradeGroupSortValue(a.label) - gradeGroupSortValue(b.label) || a.label.localeCompare(b.label, 'ko'))
+  }, [students])
+
+  return (
+    <section className="student-quick-panel" aria-labelledby="student-quick-title">
+      <header>
+        <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">학년별 학생</h2></div>
+        <span>이름을 누르면 학생 페이지로 이동합니다.</span>
+      </header>
+      <div className="grade-groups">
+        {groups.map((group) => (
+          <section className="grade-group" key={group.label}>
+            <h3>{group.label}<span>{group.students.length}명</span></h3>
+            <div>
+              {group.students.map((student) => (
+                <button
+                  type="button"
+                  className="student-quick-button"
+                  style={{ '--student-color': student.color } as CSSProperties}
+                  key={student.id}
+                  onClick={() => onOpenStudent(student.id)}
+                  aria-label={`${group.label} ${student.name} 학생 페이지 열기`}
+                >
+                  <Avatar student={student} size="sm" />
+                  <span>{student.name}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -1131,12 +1180,7 @@ export default function App() {
 
         {view === 'schedule' ? (
           <>
-            <section className="stats-grid" aria-label="오늘의 요약">
-              <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
-              <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
-              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={appState.lessons.filter((lesson) => lesson.kind === 'group').length} hint="주간 그룹 일정" tone="purple" />
-              <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
-            </section>
+            <StudentQuickLinks students={appState.students} onOpenStudent={showStudentDetail} />
 
             <section className={`schedule-panel${scheduleFullscreen ? ' is-fullscreen' : ''}`}>
               <header className="panel-toolbar">
@@ -1256,6 +1300,12 @@ export default function App() {
                   <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
                 </>
               )}
+            </section>
+            <section className="stats-grid stats-grid-bottom" aria-label="오늘의 요약">
+              <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
+              <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
+              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={appState.lessons.filter((lesson) => lesson.kind === 'group').length} hint="주간 그룹 일정" tone="purple" />
+              <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
             </section>
           </>
         ) : view === 'students' ? (

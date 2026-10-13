@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   intervalsOverlap,
   getScheduleColumns,
+  getStudentGradeGroup,
+  gradeGroupSortValue,
   layoutLessons,
   lessonsForStudent,
   minutesToTime,
@@ -68,6 +70,19 @@ describe('표시 요일 설정', () => {
     expect(getScheduleColumns('hidden')).toHaveLength(5)
     expect(getScheduleColumns('combined').at(-1)?.weekdays).toEqual([6, 7])
     expect(getScheduleColumns('separate')).toHaveLength(7)
+  })
+})
+
+describe('학생 학년 그룹', () => {
+  it('학교급과 학년을 초5, 중1 형식으로 묶는다', () => {
+    expect(getStudentGradeGroup({ school: '한빛초', grade: '5학년' })).toBe('초5')
+    expect(getStudentGradeGroup({ school: '가온중', grade: '1학년' })).toBe('중1')
+    expect(getStudentGradeGroup({ school: '새봄고', grade: '고2' })).toBe('고2')
+    expect(getStudentGradeGroup({ school: '', grade: '' })).toBe('학년 미등록')
+  })
+
+  it('초등, 중등, 고등 순서로 정렬 값을 만든다', () => {
+    expect(['고1', '초6', '중1'].sort((a, b) => gradeGroupSortValue(a) - gradeGroupSortValue(b))).toEqual(['초6', '중1', '고1'])
   })
 })
 
