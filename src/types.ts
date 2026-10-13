@@ -51,6 +51,7 @@ export type WeekendMode = 'hidden' | 'combined' | 'separate'
 
 export type ScheduleSettings = {
   academyName: string
+  sidebarWidth: number
   startMinute: number
   endMinute: number
   weekendMode: WeekendMode

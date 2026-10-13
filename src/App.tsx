@@ -28,7 +28,15 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   STUDENT_COLORS,
   WEEKDAYS,
@@ -66,6 +74,9 @@ type StudentModalState = {
 const PIXELS_PER_MINUTE = 1.05
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
+const SIDEBAR_MIN_WIDTH = 190
+const SIDEBAR_MAX_WIDTH = 360
+const SIDEBAR_DEFAULT_WIDTH = 264
 
 function timeOptionsFor(value: string): number[] {
   const minute = timeToMinutes(value)
@@ -1107,6 +1118,48 @@ export default function App() {
     setNotice('예시 데이터로 초기화했습니다.')
   }
 
+  const resizeSidebar = (width: number) => {
+    setScheduleSettings((current) => ({
+      ...current,
+      sidebarWidth: Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width))),
+    }))
+  }
+
+  const startSidebarResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = scheduleSettings.sidebarWidth
+
+    const finishResize = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+      window.removeEventListener('pointercancel', finishResize)
+      document.body.classList.remove('sidebar-resizing')
+    }
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      resizeSidebar(startWidth + moveEvent.clientX - startX)
+    }
+
+    document.body.classList.add('sidebar-resizing')
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+    window.addEventListener('pointercancel', finishResize)
+  }
+
+  const handleSidebarResizeKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      resizeSidebar(scheduleSettings.sidebarWidth - 10)
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      resizeSidebar(scheduleSettings.sidebarWidth + 10)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      resizeSidebar(SIDEBAR_DEFAULT_WIDTH)
+    }
+  }
+
   const activeLesson = lessonModal.lessonId
     ? appState.lessons.find((lesson) => lesson.id === lessonModal.lessonId)
     : undefined
@@ -1115,7 +1168,10 @@ export default function App() {
     : undefined
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      style={{ '--sidebar-width': `${scheduleSettings.sidebarWidth}px` } as CSSProperties}
+    >
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">{scheduleSettings.academyName.trim().slice(0, 1) || '학'}</span>
@@ -1168,6 +1224,20 @@ export default function App() {
           <button type="button" onClick={handleReset}><RotateCcw size={15} /> 예시 데이터로 초기화</button>
           <small>이 브라우저에 자동 저장됩니다.</small>
         </div>
+        <button
+          type="button"
+          className="sidebar-resizer"
+          onPointerDown={startSidebarResize}
+          onDoubleClick={() => resizeSidebar(SIDEBAR_DEFAULT_WIDTH)}
+          onKeyDown={handleSidebarResizeKey}
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuenow={scheduleSettings.sidebarWidth}
+          aria-label={`메뉴바 너비 ${scheduleSettings.sidebarWidth}px. 좌우 방향키로 조절`}
+          title="드래그해서 메뉴바 너비 조절 · 더블클릭으로 초기화"
+        />
       </aside>
 
       <main className="main-content">

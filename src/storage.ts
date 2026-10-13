@@ -7,6 +7,7 @@ export const SETTINGS_STORAGE_KEY = 'ideal-tribble:schedule-settings:v1'
 
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   academyName: '우리 학원',
+  sidebarWidth: 264,
   startMinute: 13 * 60,
   endMinute: 22 * 60,
   weekendMode: 'hidden',
@@ -74,6 +75,9 @@ export function loadScheduleSettings(): ScheduleSettings {
       academyName: typeof value.academyName === 'string' && value.academyName.trim()
         ? value.academyName.trim()
         : DEFAULT_SCHEDULE_SETTINGS.academyName,
+      sidebarWidth: Number.isInteger(value.sidebarWidth)
+        ? Math.max(190, Math.min(360, Number(value.sidebarWidth)))
+        : DEFAULT_SCHEDULE_SETTINGS.sidebarWidth,
       startMinute: Number(value.startMinute),
       endMinute: Number(value.endMinute),
       weekendMode: value.weekendMode,
