@@ -6,6 +6,8 @@ import {
   Bus,
   CalendarDays,
   Check,
+  ChevronDown,
+  ChevronRight,
   Clock3,
   Copy,
   ExternalLink,
@@ -390,6 +392,7 @@ function StatCard({ icon, label, value, hint, tone }: { icon: React.ReactNode; l
 }
 
 function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; onOpenStudent: (studentId: string) => void }) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const groups = useMemo(() => {
     const grouped = new Map<string, Student[]>()
     students.forEach((student) => {
@@ -403,6 +406,14 @@ function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; o
       }))
       .sort((a, b) => gradeGroupSortValue(a.label) - gradeGroupSortValue(b.label) || a.label.localeCompare(b.label, 'ko'))
   }, [students])
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
 
   return (
     <section className="student-quick-panel" aria-labelledby="student-quick-title">
@@ -413,22 +424,29 @@ function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; o
       <div className="grade-groups">
         {groups.map((group) => (
           <section className="grade-group" key={group.label}>
-            <h3>{group.label}<span>{group.students.length}명</span></h3>
-            <div>
-              {group.students.map((student) => (
-                <button
-                  type="button"
-                  className="student-quick-button"
-                  style={{ '--student-color': student.color } as CSSProperties}
-                  key={student.id}
-                  onClick={() => onOpenStudent(student.id)}
-                  aria-label={`${group.label} ${student.name} 학생 페이지 열기`}
-                >
-                  <Avatar student={student} size="sm" />
-                  <span>{student.name}</span>
-                </button>
-              ))}
-            </div>
+            <header className="grade-group-head">
+              <h3>{group.label}<span>{group.students.length}명</span></h3>
+              <button type="button" className="grade-toggle" onClick={() => toggleGroup(group.label)} aria-expanded={!collapsedGroups.has(group.label)}>
+                {collapsedGroups.has(group.label) ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                {collapsedGroups.has(group.label) ? '펼쳐보기' : '접어보기'}
+              </button>
+            </header>
+            {!collapsedGroups.has(group.label) && (
+              <div>
+                {group.students.map((student) => (
+                  <button
+                    type="button"
+                    className="student-quick-button"
+                    style={{ '--student-color': student.color } as CSSProperties}
+                    key={student.id}
+                    onClick={() => onOpenStudent(student.id)}
+                    aria-label={`${group.label} ${student.name} 학생 페이지 열기`}
+                  >
+                    <span>{student.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         ))}
       </div>
