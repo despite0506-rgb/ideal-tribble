@@ -50,6 +50,16 @@ body.modal-open {
   overflow: hidden;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 button,
 input,
 select,
@@ -588,6 +598,112 @@ textarea:focus-visible {
   gap: 10px;
 }
 
+.schedule-settings-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.schedule-settings-button:hover,
+.schedule-settings-button.active {
+  border-color: #aacbc4;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.schedule-settings {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #fbfcfc;
+}
+
+.settings-label,
+.weekend-setting legend {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.settings-time-range {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-light);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.settings-time-range .settings-label {
+  margin-right: 3px;
+}
+
+.settings-time-range select {
+  min-height: 34px;
+  padding: 0 26px 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekend-setting {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.weekend-setting > div {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f3f6f5;
+}
+
+.weekend-setting button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.weekend-setting button.active {
+  color: var(--brand);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.hidden-lessons-note {
+  margin: 0 0 0 auto;
+  color: #8a641e;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .view-switch {
   display: flex;
   padding: 3px;
@@ -661,7 +777,7 @@ textarea:focus-visible {
 }
 
 .timeline-shell {
-  min-width: 1050px;
+  min-width: max(760px, var(--timeline-min-width));
   overflow: hidden;
 }
 
@@ -674,8 +790,7 @@ textarea:focus-visible {
   z-index: 6;
   top: 0;
   display: grid;
-  min-width: 1050px;
-  grid-template-columns: 62px repeat(7, minmax(140px, 1fr));
+  grid-template-columns: 62px repeat(var(--day-count), minmax(120px, 1fr));
   border-bottom: 1px solid var(--border);
   background: rgba(248, 250, 249, 0.96);
   backdrop-filter: blur(10px);
@@ -731,7 +846,6 @@ textarea:focus-visible {
 
 .timeline-body {
   display: grid;
-  min-width: 1050px;
   grid-template-columns: 62px 1fr;
 }
 
@@ -753,7 +867,7 @@ textarea:focus-visible {
 .days-grid {
   display: grid;
   height: 100%;
-  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  grid-template-columns: repeat(var(--day-count), minmax(120px, 1fr));
 }
 
 .day-column {
@@ -798,10 +912,10 @@ textarea:focus-visible {
   overflow: hidden;
   padding: 6px 7px;
   border: 1px solid rgba(81, 115, 108, 0.16);
-  border-left: 3px solid var(--brand);
+  border-left: 3px solid var(--lesson-color, var(--brand));
   border-radius: 7px;
   color: var(--text);
-  background: #edf7f4;
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 12%, white);
   box-shadow: 0 1px 3px rgba(18, 38, 32, 0.08);
   cursor: pointer;
   text-align: left;
@@ -809,8 +923,11 @@ textarea:focus-visible {
 }
 
 .lesson-card.group {
-  border-left-color: var(--purple);
-  background: #f4effc;
+  border-right: 3px solid var(--lesson-color-2, var(--purple));
+  border-left-color: var(--lesson-color, var(--purple));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 13%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 11%, white));
 }
 
 .lesson-card:hover,
@@ -830,6 +947,46 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+}
+
+.lesson-card-badges {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.lesson-ride-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.lesson-ride-summary > span {
+  display: inline-flex;
+  min-width: 20px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 1px solid #d6ddda;
+  border-radius: 999px;
+  color: #9aa49f;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.lesson-ride-summary > .active.arrival {
+  border-color: #afc9f4;
+  color: #28569a;
+  background: #e7f0ff;
+}
+
+.lesson-ride-summary > .active.departure {
+  border-color: #d0bcec;
+  color: #65459c;
+  background: #f0e8ff;
 }
 
 .lesson-time {
@@ -985,17 +1142,31 @@ textarea:focus-visible {
   min-height: 108px;
   padding: 11px 38px 10px 12px;
   border: 1px solid #d5e7e2;
-  border-left: 4px solid var(--brand);
+  border-left: 4px solid var(--lesson-color, var(--brand));
   border-radius: 9px;
-  background: #f5fbf9;
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 7%, white);
   cursor: pointer;
   text-align: left;
 }
 
 .lesson-list-card.group {
   border-color: #e3daf2;
-  border-left-color: var(--purple);
-  background: #faf7fd;
+  border-right: 4px solid var(--lesson-color-2, var(--purple));
+  border-left-color: var(--lesson-color, var(--purple));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 8%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 7%, white));
+}
+
+.combined-day-label {
+  display: inline-block;
+  margin-bottom: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 8px;
+  font-weight: 750;
 }
 
 .lesson-list-card:hover {
@@ -1085,8 +1256,9 @@ textarea:focus-visible {
 
 .student-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 270px));
   gap: 15px;
+  justify-content: start;
 }
 
 .student-card {
@@ -1365,6 +1537,7 @@ textarea:focus-visible {
 
 .color-options {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1623,7 +1796,9 @@ textarea:focus-visible {
 @media (max-width: 1180px) {
   .main-content { padding-right: 22px; padding-left: 22px; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .student-card-grid { grid-template-columns: repeat(2, minmax(250px, 1fr)); }
+  .student-card-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 260px)); }
+  .schedule-settings { flex-wrap: wrap; gap: 10px 16px; }
+  .hidden-lessons-note { width: 100%; margin-left: 0; }
 }
 
 @media (max-width: 900px) {
@@ -1697,9 +1872,15 @@ textarea:focus-visible {
   .view-switch { display: none; }
   .desktop-schedule { display: none; }
   .mobile-schedule { display: block; }
+  .schedule-settings { align-items: flex-start; padding: 12px 13px; }
+  .settings-time-range { flex-wrap: wrap; }
+  .settings-time-range .settings-label { width: 100%; }
+  .weekend-setting { width: 100%; align-items: flex-start; flex-direction: column; }
+  .weekend-setting > div { width: 100%; }
+  .weekend-setting button { flex: 1; }
   .weekday-strip {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
     gap: 3px;
     padding: 9px;
     border-bottom: 1px solid var(--border);

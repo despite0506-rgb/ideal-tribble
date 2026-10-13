@@ -4,6 +4,7 @@ import type {
   LessonDraft,
   LessonLayout,
   Student,
+  WeekendMode,
   Weekday,
 } from './types'
 
@@ -24,7 +25,46 @@ export const STUDENT_COLORS = [
   '#8070ad',
   '#5f8754',
   '#b16f8f',
+  '#d05d5d',
+  '#d28635',
+  '#bd9b2f',
+  '#3f8c6c',
+  '#3284a8',
+  '#4c7fd1',
+  '#7958bd',
+  '#c0568b',
+  '#8b6b52',
+  '#596875',
 ]
+
+export type ScheduleColumn = {
+  key: string
+  short: string
+  long: string
+  weekdays: Weekday[]
+}
+
+export function getScheduleColumns(weekendMode: WeekendMode): ScheduleColumn[] {
+  const weekdays = WEEKDAYS.slice(0, 5).map((day) => ({
+    key: String(day.value),
+    short: day.short,
+    long: day.long,
+    weekdays: [day.value],
+  }))
+  if (weekendMode === 'hidden') return weekdays
+  if (weekendMode === 'combined') {
+    return [...weekdays, { key: 'weekend', short: '주말', long: '주말', weekdays: [6, 7] }]
+  }
+  return [
+    ...weekdays,
+    ...WEEKDAYS.slice(5).map((day) => ({
+      key: String(day.value),
+      short: day.short,
+      long: day.long,
+      weekdays: [day.value],
+    })),
+  ]
+}
 
 export function createId(prefix: string): string {
   const value = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -80,6 +120,8 @@ export function validateLesson(
     errors.push('시작 및 종료 시간을 입력해 주세요.')
   } else if (draft.startMinute < 0 || draft.endMinute > 1440 || draft.startMinute >= draft.endMinute) {
     errors.push('종료 시간은 시작 시간보다 늦어야 합니다.')
+  } else if (draft.startMinute % 10 !== 0 || draft.endMinute % 10 !== 0) {
+    errors.push('수업 시간은 10분 단위로 설정해 주세요.')
   }
   if (ids.length !== expectedCount) {
     errors.push(draft.kind === 'group' ? '그룹 수업은 서로 다른 학생 2명을 선택해야 합니다.' : '개인 수업은 학생 1명을 선택해야 합니다.')

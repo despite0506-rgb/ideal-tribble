@@ -1,8 +1,15 @@
 import { DEMO_STATE } from './demoData'
 import { validateState } from './domain'
-import type { AppState } from './types'
+import type { AppState, ScheduleSettings } from './types'
 
 export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
+export const SETTINGS_STORAGE_KEY = 'ideal-tribble:schedule-settings:v1'
+
+export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
+  startMinute: 13 * 60,
+  endMinute: 22 * 60,
+  weekendMode: 'hidden',
+}
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
 
@@ -39,4 +46,30 @@ export function resetState(): AppState {
   const state = cloneDemo()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   return state
+}
+
+export function loadScheduleSettings(): ScheduleSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return DEFAULT_SCHEDULE_SETTINGS
+    const value = JSON.parse(raw) as Partial<ScheduleSettings>
+    const validWeekendMode = value.weekendMode === 'hidden' || value.weekendMode === 'combined' || value.weekendMode === 'separate'
+    const validTimes = Number.isInteger(value.startMinute)
+      && Number.isInteger(value.endMinute)
+      && Number(value.startMinute) >= 0
+      && Number(value.endMinute) <= 1440
+      && Number(value.startMinute) < Number(value.endMinute)
+    if (!validWeekendMode || !validTimes) return DEFAULT_SCHEDULE_SETTINGS
+    return value as ScheduleSettings
+  } catch {
+    return DEFAULT_SCHEDULE_SETTINGS
+  }
+}
+
+export function saveScheduleSettings(settings: ScheduleSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch {
+    // The timetable can still be used when browser preference storage is unavailable.
+  }
 }

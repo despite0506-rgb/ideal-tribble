@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Settings2,
   Trash2,
   UserPlus,
   UserRound,
@@ -24,6 +25,7 @@ import {
   WEEKDAYS,
   createId,
   formatDuration,
+  getScheduleColumns,
   getTodayWeekday,
   layoutLessons,
   lessonsForStudent,
@@ -31,8 +33,8 @@ import {
   timeToMinutes,
   validateLesson,
 } from './domain'
-import { loadState, resetState, saveState } from './storage'
-import type { AppState, Lesson, LessonDraft, Student, Transport, Weekday } from './types'
+import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
+import type { AppState, Lesson, LessonDraft, ScheduleSettings, Student, Transport, Weekday, WeekendMode } from './types'
 
 type View = 'schedule' | 'students'
 type ScheduleDisplay = 'timeline' | 'list'
@@ -50,9 +52,16 @@ type StudentModalState = {
   studentId?: string
 }
 
-const VIEW_START = 9 * 60
-const VIEW_END = 21 * 60
 const PIXELS_PER_MINUTE = 1.05
+const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
+const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
+
+function timeOptionsFor(value: string): number[] {
+  const minute = timeToMinutes(value)
+  return Number.isFinite(minute) && !TEN_MINUTE_OPTIONS.includes(minute)
+    ? [...TEN_MINUTE_OPTIONS, minute].sort((a, b) => a - b)
+    : TEN_MINUTE_OPTIONS
+}
 
 function initials(name: string): string {
   return name.trim().slice(-2)
@@ -83,12 +92,23 @@ function RidePills({ transport, compact = false }: { transport: Transport; compa
     <span className={`ride-pills${compact ? ' ride-pills-compact' : ''}`}>
       <span className={`ride-pill ${transport.arrivalRide ? 'ride-on arrival' : 'ride-off'}`}>
         <ArrowDown size={11} aria-hidden="true" />
-        <span>{compact ? '등원' : `등원 ${transport.arrivalRide ? 'O' : 'X'}`}</span>
+        <span>{compact ? `등원 ${transport.arrivalRide ? 'O' : 'X'}` : `등원 ${transport.arrivalRide ? 'O' : 'X'}`}</span>
       </span>
       <span className={`ride-pill ${transport.departureRide ? 'ride-on departure' : 'ride-off'}`}>
         <ArrowUp size={11} aria-hidden="true" />
-        <span>{compact ? '하원' : `하원 ${transport.departureRide ? 'O' : 'X'}`}</span>
+        <span>{compact ? `하원 ${transport.departureRide ? 'O' : 'X'}` : `하원 ${transport.departureRide ? 'O' : 'X'}`}</span>
       </span>
+    </span>
+  )
+}
+
+function LessonRideSummary({ lesson }: { lesson: Lesson }) {
+  const arrivalCount = lesson.participants.filter((participant) => participant.transport.arrivalRide).length
+  const departureCount = lesson.participants.filter((participant) => participant.transport.departureRide).length
+  return (
+    <span className="lesson-ride-summary" aria-label={`등원차량 ${arrivalCount}명, 하원차량 ${departureCount}명`}>
+      <span className={arrivalCount ? 'active arrival' : ''} title={`등원차량 ${arrivalCount}명`}><ArrowDown size={9} />{arrivalCount}</span>
+      <span className={departureCount ? 'active departure' : ''} title={`하원차량 ${departureCount}명`}><ArrowUp size={9} />{departureCount}</span>
     </span>
   )
 }
@@ -112,7 +132,10 @@ function LessonCardContent({
         <span className="lesson-time">
           {minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)}
         </span>
-        {lesson.kind === 'group' && <span className="kind-badge">2인 그룹</span>}
+        <span className="lesson-card-badges">
+          <LessonRideSummary lesson={lesson} />
+          {lesson.kind === 'group' && <span className="kind-badge">2인</span>}
+        </span>
       </div>
       <strong className="lesson-title">{lesson.label || '수업'}</strong>
       <div className="lesson-people">
@@ -121,16 +144,14 @@ function LessonCardContent({
         </span>
         <span>{participants.map(({ student }) => student.name).join(' · ')}</span>
       </div>
-      {!dense && (
-        <div className="lesson-rides">
-          {participants.map(({ participant, student }) => (
-            <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
-              {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
-              <RidePills transport={participant.transport} compact />
-            </span>
-          ))}
-        </div>
-      )}
+      <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
+        {participants.map(({ participant, student }) => (
+          <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
+            {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
+            <RidePills transport={participant.transport} compact />
+          </span>
+        ))}
+      </div>
     </>
   )
 }
@@ -148,37 +169,42 @@ function Timeline({
   lessons,
   students,
   selectedStudentId,
+  settings,
   onOpenLesson,
   onAddAt,
 }: {
   lessons: Lesson[]
   students: Student[]
   selectedStudentId: Selection
+  settings: ScheduleSettings
   onOpenLesson: (lessonId: string) => void
   onAddAt: (weekday: Weekday) => void
 }) {
-  const earliest = lessons.length ? Math.min(...lessons.map((lesson) => lesson.startMinute)) : VIEW_START
-  const latest = lessons.length ? Math.max(...lessons.map((lesson) => lesson.endMinute)) : VIEW_END
-  const start = Math.max(6 * 60, Math.min(VIEW_START, Math.floor(earliest / 60) * 60))
-  const end = Math.min(24 * 60, Math.max(VIEW_END, Math.ceil(latest / 60) * 60))
+  const columns = getScheduleColumns(settings.weekendMode)
+  const start = settings.startMinute
+  const end = settings.endMinute
   const height = (end - start) * PIXELS_PER_MINUTE
   const hours = Array.from({ length: Math.floor((end - start) / 60) + 1 }, (_, index) => start + index * 60)
   const today = getTodayWeekday()
+  const gridStyle = {
+    '--day-count': columns.length,
+    '--timeline-min-width': `${62 + columns.length * 120}px`,
+  } as CSSProperties
 
   return (
-    <div className="timeline-shell" aria-label="주간 시간표">
+    <div className="timeline-shell" style={gridStyle} aria-label="주간 시간표">
       <div className="timeline-header">
         <div className="time-heading">시간</div>
-        {WEEKDAYS.map((day) => (
+        {columns.map((column) => (
           <button
-            className={`day-heading${day.value === today ? ' is-today' : ''}`}
-            key={day.value}
+            className={`day-heading${column.weekdays.includes(today) ? ' is-today' : ''}`}
+            key={column.key}
             type="button"
-            onClick={() => onAddAt(day.value)}
-            aria-label={`${day.long}에 수업 추가`}
+            onClick={() => onAddAt(column.weekdays[0] ?? 1)}
+            aria-label={`${column.long}에 수업 추가`}
           >
-            <span>{day.short}</span>
-            {day.value === today && <small>오늘</small>}
+            <span>{column.short}</span>
+            {column.weekdays.includes(today) && <small>오늘</small>}
           </button>
         ))}
       </div>
@@ -191,10 +217,14 @@ function Timeline({
           ))}
         </div>
         <div className="days-grid">
-          {WEEKDAYS.map((day) => {
-            const dayLessons = layoutLessons(lessons.filter((lesson) => lesson.weekday === day.value))
+          {columns.map((column) => {
+            const dayLessons = layoutLessons(lessons.filter((lesson) => (
+              column.weekdays.includes(lesson.weekday)
+              && lesson.endMinute > start
+              && lesson.startMinute < end
+            )))
             return (
-              <div className={`day-column${day.value === today ? ' is-today' : ''}`} key={day.value}>
+              <div className={`day-column${column.weekdays.includes(today) ? ' is-today' : ''}`} key={column.key}>
                 {hours.slice(0, -1).map((minute) => (
                   <span
                     className="hour-line"
@@ -205,11 +235,17 @@ function Timeline({
                 ))}
                 {dayLessons.map((lesson) => {
                   const width = 100 / lesson.columnCount
+                  const firstStudent = studentById(students, lesson.participants[0]?.studentId ?? '')
+                  const secondStudent = studentById(students, lesson.participants[1]?.studentId ?? '')
+                  const clippedStart = Math.max(lesson.startMinute, start)
+                  const clippedEnd = Math.min(lesson.endMinute, end)
                   const cardStyle = {
-                    top: (lesson.startMinute - start) * PIXELS_PER_MINUTE + 3,
-                    height: Math.max((lesson.endMinute - lesson.startMinute) * PIXELS_PER_MINUTE - 6, 34),
+                    top: (clippedStart - start) * PIXELS_PER_MINUTE + 3,
+                    height: Math.max((clippedEnd - clippedStart) * PIXELS_PER_MINUTE - 6, 34),
                     left: `calc(${lesson.column * width}% + 3px)`,
                     width: `calc(${width}% - 6px)`,
+                    '--lesson-color': firstStudent?.color ?? '#2f6f68',
+                    '--lesson-color-2': secondStudent?.color ?? firstStudent?.color ?? '#2f6f68',
                   } as CSSProperties
                   return (
                     <button
@@ -236,6 +272,7 @@ function Timeline({
 function LessonList({
   lessons,
   students,
+  weekendMode,
   onOpenLesson,
   selectedDay,
   onSelectDay,
@@ -243,41 +280,45 @@ function LessonList({
 }: {
   lessons: Lesson[]
   students: Student[]
+  weekendMode: WeekendMode
   onOpenLesson: (lessonId: string) => void
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   mobileOnly?: boolean
 }) {
-  const displayedDays = mobileOnly ? WEEKDAYS.filter((day) => day.value === selectedDay) : WEEKDAYS
+  const columns = getScheduleColumns(weekendMode)
+  const displayedColumns = mobileOnly
+    ? columns.filter((column) => column.weekdays.includes(selectedDay))
+    : columns
   return (
     <div className={mobileOnly ? 'mobile-schedule' : 'lesson-list-view'}>
       {mobileOnly && (
         <div className="weekday-strip" role="tablist" aria-label="요일 선택">
-          {WEEKDAYS.map((day) => (
+          {columns.map((column) => (
             <button
-              key={day.value}
+              key={column.key}
               type="button"
               role="tab"
-              aria-selected={selectedDay === day.value}
-              className={selectedDay === day.value ? 'active' : ''}
-              onClick={() => onSelectDay(day.value)}
+              aria-selected={column.weekdays.includes(selectedDay)}
+              className={column.weekdays.includes(selectedDay) ? 'active' : ''}
+              onClick={() => onSelectDay(column.weekdays[0] ?? 1)}
             >
-              <span>{day.short}</span>
-              {day.value === getTodayWeekday() && <small>오늘</small>}
+              <span>{column.short}</span>
+              {column.weekdays.includes(getTodayWeekday()) && <small>오늘</small>}
             </button>
           ))}
         </div>
       )}
-      {displayedDays.map((day) => {
+      {displayedColumns.map((column) => {
         const dayLessons = lessons
-          .filter((lesson) => lesson.weekday === day.value)
-          .sort((a, b) => a.startMinute - b.startMinute)
+          .filter((lesson) => column.weekdays.includes(lesson.weekday))
+          .sort((a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute)
         return (
-          <section className="lesson-list-day" key={day.value}>
+          <section className="lesson-list-day" key={column.key}>
             <header>
               <div>
                 <span className="weekday-dot" />
-                <h3>{day.long}</h3>
+                <h3>{column.long}</h3>
               </div>
               <span>{dayLessons.length}개 수업</span>
             </header>
@@ -285,18 +326,28 @@ function LessonList({
               <div className="empty-day">등록된 수업이 없습니다.</div>
             ) : (
               <div className="lesson-list-cards">
-                {dayLessons.map((lesson) => (
+                {dayLessons.map((lesson) => {
+                  const firstStudent = studentById(students, lesson.participants[0]?.studentId ?? '')
+                  const secondStudent = studentById(students, lesson.participants[1]?.studentId ?? '')
+                  const cardStyle = {
+                    '--lesson-color': firstStudent?.color ?? '#2f6f68',
+                    '--lesson-color-2': secondStudent?.color ?? firstStudent?.color ?? '#2f6f68',
+                  } as CSSProperties
+                  return (
                   <button
                     type="button"
                     className={`lesson-list-card ${lesson.kind}`}
+                    style={cardStyle}
                     onClick={() => onOpenLesson(lesson.id)}
                     key={lesson.id}
                     aria-label={lessonAriaLabel(lesson, students)}
                   >
+                    {column.weekdays.length > 1 && <span className="combined-day-label">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.long}</span>}
                     <LessonCardContent lesson={lesson} students={students} />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
                   </button>
-                ))}
+                  )
+                })}
               </div>
             )}
           </section>
@@ -572,13 +623,17 @@ function LessonModal({
               </select>
             </label>
             <label className="field">
-              <span>시작 시간</span>
-              <input type="time" step="60" value={start} onChange={(event) => setStart(event.target.value)} />
+              <span>시작 시간 <small>10분 단위</small></span>
+              <select value={start} onChange={(event) => setStart(event.target.value)}>
+                {timeOptionsFor(start).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
+              </select>
             </label>
             <span className="time-divider" aria-hidden="true">→</span>
             <label className="field">
-              <span>종료 시간</span>
-              <input type="time" step="60" value={end} onChange={(event) => setEnd(event.target.value)} />
+              <span>종료 시간 <small>10분 단위</small></span>
+              <select value={end} onChange={(event) => setEnd(event.target.value)}>
+                {timeOptionsFor(end).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
+              </select>
             </label>
           </div>
           {Number.isFinite(duration) && duration > 0 && (
@@ -633,6 +688,8 @@ export default function App() {
   const [studentPageQuery, setStudentPageQuery] = useState('')
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
   const [selectedDay, setSelectedDay] = useState<Weekday>(getTodayWeekday())
+  const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(() => loadScheduleSettings())
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [notice, setNotice] = useState('')
@@ -649,6 +706,16 @@ export default function App() {
     return () => window.clearTimeout(timeout)
   }, [notice])
 
+  useEffect(() => {
+    saveScheduleSettings(scheduleSettings)
+    const availableColumns = getScheduleColumns(scheduleSettings.weekendMode)
+    if (!availableColumns.some((column) => column.weekdays.includes(selectedDay))) {
+      setSelectedDay(availableColumns[0]?.weekdays[0] ?? 1)
+    } else if (scheduleSettings.weekendMode === 'combined' && selectedDay === 7) {
+      setSelectedDay(6)
+    }
+  }, [scheduleSettings, selectedDay])
+
   const filteredStudents = appState.students.filter((student) => {
     const normalized = studentQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalized)
@@ -659,6 +726,12 @@ export default function App() {
   })
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const visibleLessons = selectedStudent ? lessonsForStudent(appState.lessons, selectedStudent.id) : appState.lessons
+  const displayedWeekdays = getScheduleColumns(scheduleSettings.weekendMode).flatMap((column) => column.weekdays)
+  const outsideDisplayCount = visibleLessons.filter((lesson) => (
+    !displayedWeekdays.includes(lesson.weekday)
+    || lesson.endMinute <= scheduleSettings.startMinute
+    || lesson.startMinute >= scheduleSettings.endMinute
+  )).length
   const today = getTodayWeekday()
   const todayLessons = appState.lessons.filter((lesson) => lesson.weekday === today)
   const todayRideCount = todayLessons.reduce(
@@ -842,12 +915,73 @@ export default function App() {
                 </div>
                 <div className="toolbar-actions">
                   {selectedStudent && <RidePills transport={selectedStudent.defaultTransport} />}
+                  <button
+                    type="button"
+                    className={`schedule-settings-button${settingsOpen ? ' active' : ''}`}
+                    onClick={() => setSettingsOpen((open) => !open)}
+                    aria-expanded={settingsOpen}
+                  >
+                    <Settings2 size={15} /> 표시 설정
+                  </button>
                   <div className="view-switch" aria-label="보기 방식">
                     <button type="button" className={scheduleDisplay === 'timeline' ? 'active' : ''} onClick={() => setScheduleDisplay('timeline')} aria-label="시간표 보기"><CalendarDays size={16} /> 시간표</button>
                     <button type="button" className={scheduleDisplay === 'list' ? 'active' : ''} onClick={() => setScheduleDisplay('list')} aria-label="목록 보기"><List size={16} /> 목록</button>
                   </div>
                 </div>
               </header>
+              {settingsOpen && (
+                <div className="schedule-settings" aria-label="시간표 표시 설정">
+                  <div className="settings-time-range">
+                    <span className="settings-label">보이는 시간</span>
+                    <label>
+                      <span className="sr-only">표시 시작 시간</span>
+                      <select
+                        value={scheduleSettings.startMinute}
+                        onChange={(event) => setScheduleSettings((current) => ({ ...current, startMinute: Number(event.target.value) }))}
+                      >
+                        {DISPLAY_TIME_OPTIONS.filter((minute) => minute < scheduleSettings.endMinute).map((minute) => (
+                          <option value={minute} key={minute}>{minutesToTime(minute)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <span>부터</span>
+                    <label>
+                      <span className="sr-only">표시 종료 시간</span>
+                      <select
+                        value={scheduleSettings.endMinute}
+                        onChange={(event) => setScheduleSettings((current) => ({ ...current, endMinute: Number(event.target.value) }))}
+                      >
+                        {DISPLAY_TIME_OPTIONS.filter((minute) => minute > scheduleSettings.startMinute).map((minute) => (
+                          <option value={minute} key={minute}>{minutesToTime(minute)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <span>까지</span>
+                  </div>
+                  <fieldset className="weekend-setting">
+                    <legend>주말 표시</legend>
+                    <div>
+                      {([
+                        ['hidden', '숨김'],
+                        ['combined', '주말 한 칸'],
+                        ['separate', '토·일 분리'],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          type="button"
+                          key={mode}
+                          className={scheduleSettings.weekendMode === mode ? 'active' : ''}
+                          onClick={() => setScheduleSettings((current) => ({ ...current, weekendMode: mode }))}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  {outsideDisplayCount > 0 && (
+                    <p className="hidden-lessons-note">현재 설정에서 {outsideDisplayCount}개 수업이 시간표 밖에 있습니다. 목록 보기에서는 모두 확인할 수 있어요.</p>
+                  )}
+                </div>
+              )}
               {visibleLessons.length === 0 ? (
                 <div className="empty-state">
                   <span><CalendarDays size={28} /></span>
@@ -859,12 +993,12 @@ export default function App() {
                 <>
                   <div className="desktop-schedule">
                     {scheduleDisplay === 'timeline' ? (
-                      <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} onAddAt={(weekday) => openNewLesson(weekday)} />
+                      <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} onAddAt={(weekday) => openNewLesson(weekday)} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
                 </>
               )}
             </section>

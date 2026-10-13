@@ -38,6 +38,14 @@ export type AppState = {
   lessons: Lesson[]
 }
 
+export type WeekendMode = 'hidden' | 'combined' | 'separate'
+
+export type ScheduleSettings = {
+  startMinute: number
+  endMinute: number
+  weekendMode: WeekendMode
+}
+
 export type LessonDraft = Omit<Lesson, 'id' | 'createdAt'>
 
 export type LessonLayout = Lesson & {

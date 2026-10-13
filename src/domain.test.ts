@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   intervalsOverlap,
+  getScheduleColumns,
   layoutLessons,
   lessonsForStudent,
   minutesToTime,
@@ -60,6 +61,14 @@ describe('시간 변환', () => {
   })
 })
 
+describe('표시 요일 설정', () => {
+  it('주말을 숨기거나 한 칸으로 묶거나 분리한다', () => {
+    expect(getScheduleColumns('hidden')).toHaveLength(5)
+    expect(getScheduleColumns('combined').at(-1)?.weekdays).toEqual([6, 7])
+    expect(getScheduleColumns('separate')).toHaveLength(7)
+  })
+})
+
 describe('수업 겹침', () => {
   it('완전 동일, 부분 겹침, 포함 관계를 감지한다', () => {
     expect(intervalsOverlap(600, 660, 600, 660)).toBe(true)
@@ -84,6 +93,11 @@ describe('수업 겹침', () => {
     const existing = [lesson('existing', ['a'], 600, 660)]
     expect(validateLesson(lesson('next', ['a'], 660, 720), students, existing)).toEqual([])
     expect(validateLesson(lesson('tomorrow', ['a'], 630, 690, 2), students, existing)).toEqual([])
+  })
+
+  it('수업 시작과 종료는 10분 단위만 허용한다', () => {
+    expect(validateLesson(lesson('ten', ['a'], 600, 650), students, [])).toEqual([])
+    expect(validateLesson(lesson('odd', ['a'], 603, 653), students, []).join(' ')).toContain('10분 단위')
   })
 
   it('수정 중인 수업 자신을 충돌로 판단하지 않는다', () => {
