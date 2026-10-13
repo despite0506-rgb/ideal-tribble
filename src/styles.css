@@ -505,7 +505,7 @@ textarea:focus-visible {
 
 .student-quick-panel {
   margin: 22px 0 16px;
-  padding: 16px;
+  padding: 12px 13px;
   border: 1px solid var(--border);
   border-radius: 15px;
   background: #fff;
@@ -517,12 +517,12 @@ textarea:focus-visible {
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 13px;
+  margin-bottom: 9px;
 }
 
 .student-quick-panel h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: -0.025em;
 }
 
@@ -533,13 +533,13 @@ textarea:focus-visible {
 
 .grade-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
 }
 
 .grade-group {
   min-width: 0;
-  padding: 10px;
+  padding: 7px;
   border: 1px solid #e4ebe8;
   border-radius: 11px;
   background: var(--surface-subtle);
@@ -549,13 +549,13 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: var(--text);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .grade-group h3 span {
-  padding: 2px 5px;
+  padding: 1px 4px;
   border-radius: 999px;
   color: var(--text-light);
   background: #fff;
@@ -565,23 +565,23 @@ textarea:focus-visible {
 
 .grade-group > div {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 4px;
 }
 
 .student-quick-button {
   display: flex;
   min-width: 0;
-  min-height: 44px;
+  min-height: 34px;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
+  gap: 5px;
+  padding: 4px 6px;
   border: 1px solid color-mix(in srgb, var(--student-color) 32%, var(--border));
   border-radius: 8px;
   color: var(--text);
   background: #fff;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 720;
   text-align: left;
   transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
@@ -594,10 +594,10 @@ textarea:focus-visible {
 }
 
 .student-quick-button .avatar {
-  width: 25px;
-  height: 25px;
+  width: 20px;
+  height: 20px;
   border-width: 1px;
-  font-size: 7px;
+  font-size: 6px;
 }
 
 .student-quick-button > span:last-child {
@@ -2419,12 +2419,11 @@ textarea:focus-visible {
   .top-add:not(:focus) { font-size: 0; gap: 0; }
   .stats-grid { gap: 8px; margin: 14px 0 11px; }
   .stats-grid-bottom { margin-top: 11px; margin-bottom: 0; }
-  .student-quick-panel { margin: 14px 0 11px; padding: 12px; border-radius: 12px; }
-  .student-quick-panel > header { margin-bottom: 10px; }
+  .student-quick-panel { margin: 14px 0 11px; padding: 10px; border-radius: 12px; }
+  .student-quick-panel > header { margin-bottom: 7px; }
   .student-quick-panel > header > span { display: none; }
-  .grade-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-  .grade-group { padding: 8px; }
-  .grade-group > div { grid-template-columns: 1fr; }
+  .grade-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .grade-group { padding: 6px; }
   .stat-card { gap: 8px; padding: 11px; border-radius: 11px; }
   .stat-icon { width: 34px; height: 34px; }
   .stat-card strong { font-size: 18px; }
