@@ -4,7 +4,7 @@ import type { AppState, ScheduleSettings } from './types'
 
 const SUPABASE_URL = 'https://ennadoncgnjmshaqtzmw.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_gFp2uWzKqChHlhFTmRNzLQ_dhosr4Zf'
-export const SHARED_ACADEMY_EMAIL = 'academy@timetable.local'
+export const SHARED_ACADEMY_EMAIL = 'time@mange.local'
 
 export type CloudPayload = {
   cloudVersion: 1

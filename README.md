@@ -26,7 +26,7 @@
 
 ## 클라우드 설정
 
-Supabase 프로젝트에 `supabase/schema.sql`을 실행하고 Authentication에 `academy@timetable.local` 사용자를 생성합니다. 브라우저에는 공개용 publishable key만 포함하며, 데이터베이스 비밀번호와 `service_role` 키는 사용하지 않습니다. 테이블은 RLS 정책으로 공용 인증 사용자의 행만 읽고 수정할 수 있습니다.
+Supabase 프로젝트에 `supabase/schema.sql`을 실행하고 Authentication에 `time@mange.local` 사용자를 생성합니다. 브라우저에는 공개용 publishable key만 포함하며, 데이터베이스 비밀번호와 `service_role` 키는 사용하지 않습니다. 테이블은 RLS 정책으로 공용 인증 사용자의 행만 읽고 수정할 수 있습니다.
 
 ## 실행
 
