@@ -447,7 +447,15 @@ function StatCard({ icon, label, value, hint, tone }: { icon: React.ReactNode; l
   )
 }
 
-function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; onOpenStudent: (studentId: string) => void }) {
+function StudentQuickLinks({
+  students,
+  assignedStudentIds,
+  onOpenStudent,
+}: {
+  students: Student[]
+  assignedStudentIds: Set<string>
+  onOpenStudent: (studentId: string) => void
+}) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const groups = useMemo(() => {
     const grouped = new Map<string, Student[]>()
@@ -475,7 +483,7 @@ function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; o
     <section className="student-quick-panel" aria-labelledby="student-quick-title">
       <header>
         <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">학년별 학생</h2></div>
-        <span>이름을 누르면 학생 페이지로 이동합니다.</span>
+        <span><i className="student-class-key" aria-hidden="true" />색상: 현재 선생님 반 · 흑백: 다른 반</span>
       </header>
       <div className="grade-groups">
         {groups.map((group) => (
@@ -492,11 +500,11 @@ function StudentQuickLinks({ students, onOpenStudent }: { students: Student[]; o
                 {group.students.map((student) => (
                   <button
                     type="button"
-                    className="student-quick-button"
+                    className={`student-quick-button${assignedStudentIds.has(student.id) ? ' is-assigned' : ' is-unassigned'}`}
                     style={{ '--student-color': student.color } as CSSProperties}
                     key={student.id}
                     onClick={() => onOpenStudent(student.id)}
-                    aria-label={`${group.label} ${student.name} 학생 페이지 열기`}
+                    aria-label={`${group.label} ${student.name}, ${assignedStudentIds.has(student.id) ? '현재 선생님 반' : '다른 선생님 반'}, 학생 페이지 열기`}
                   >
                     <span>{student.name}</span>
                   </button>
@@ -1555,6 +1563,9 @@ export default function App() {
   const teacherLessons = useMemo(() => (
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
+  const activeTeacherStudentIds = useMemo(() => new Set(
+    teacherLessons.flatMap((lesson) => lesson.participants.map((participant) => participant.studentId)),
+  ), [teacherLessons])
   const groupSeries = useMemo(() => groupLessonsBySeries(teacherLessons), [teacherLessons])
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
@@ -1923,7 +1934,11 @@ export default function App() {
 
         {view === 'schedule' ? (
           <>
-            <StudentQuickLinks students={appState.students} onOpenStudent={showStudentDetail} />
+            <StudentQuickLinks
+              students={appState.students}
+              assignedStudentIds={activeTeacherStudentIds}
+              onOpenStudent={showStudentDetail}
+            />
 
             <section className={`schedule-panel${scheduleFullscreen ? ' is-fullscreen' : ''}`}>
               <header className="panel-toolbar">
