@@ -626,7 +626,7 @@ function LessonModal({
   presetStudentId?: string
   presetWeekday?: Weekday
   onClose: () => void
-  onSave: (lesson: Lesson) => void
+  onSave: (lessons: Lesson[]) => void
   onDelete: (lessonId: string) => void
 }) {
   const initialParticipantIds = lesson?.participants.map((participant) => participant.studentId)
@@ -635,7 +635,9 @@ function LessonModal({
     (lesson?.participants ?? []).map((participant) => [participant.studentId, participant.transport]),
   ) as Record<string, Transport>
   const [kind, setKind] = useState<Lesson['kind']>(lesson?.kind ?? 'individual')
-  const [weekday, setWeekday] = useState<Weekday>(lesson?.weekday ?? presetWeekday ?? getTodayWeekday())
+  const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([
+    lesson?.weekday ?? presetWeekday ?? getTodayWeekday(),
+  ])
   const [start, setStart] = useState(minutesToTime(lesson?.startMinute ?? 15 * 60))
   const [end, setEnd] = useState(minutesToTime(lesson?.endMinute ?? 15 * 60 + 50))
   const [label, setLabel] = useState(lesson?.label ?? '수학 · 정규')
@@ -661,29 +663,46 @@ function LessonModal({
       ? current.filter((id) => id !== studentId)
       : [...current, studentId])
   }
+  const toggleWeekday = (weekday: Weekday) => {
+    setErrors([])
+    if (lesson) {
+      setSelectedWeekdays([weekday])
+      return
+    }
+    setSelectedWeekdays((current) => current.includes(weekday)
+      ? current.filter((day) => day !== weekday)
+      : [...current, weekday].sort((first, second) => first - second))
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    const draft: LessonDraft = {
+    const sharedDraft: Omit<LessonDraft, 'weekday'> = {
       kind,
-      weekday,
       startMinute: timeToMinutes(start),
       endMinute: timeToMinutes(end),
       label: label.trim(),
       note: note.trim(),
       participants: participantIds.map((studentId) => ({ studentId, transport: rideFor(studentId) })),
     }
-    const nextErrors = validateLesson(draft, students, lessons, lesson?.id)
-    if (!draft.label) nextErrors.unshift('수업 이름을 입력해 주세요.')
+    const nextErrors = selectedWeekdays.length === 0
+      ? ['요일을 한 개 이상 선택해 주세요.']
+      : [...new Set(selectedWeekdays.flatMap((weekday) => {
+        const dayName = WEEKDAYS.find((day) => day.value === weekday)?.long ?? ''
+        return validateLesson({ ...sharedDraft, weekday }, students, lessons, lesson?.id)
+          .map((error) => error.includes('겹칩니다') ? `${dayName}: ${error}` : error)
+      }))]
+    if (!sharedDraft.label) nextErrors.unshift('수업 이름을 입력해 주세요.')
     if (nextErrors.length) {
       setErrors(nextErrors)
       return
     }
-    onSave({
-      ...draft,
+    const createdAt = lesson?.createdAt ?? new Date().toISOString()
+    onSave(selectedWeekdays.map((weekday) => ({
+      ...sharedDraft,
+      weekday,
       id: lesson?.id ?? createId('lesson'),
-      createdAt: lesson?.createdAt ?? new Date().toISOString(),
-    })
+      createdAt,
+    })))
   }
 
   return (
@@ -734,13 +753,26 @@ function LessonModal({
             <span>수업 이름 <em>필수</em></span>
             <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 수학 · 심화" />
           </label>
+          <fieldset className="weekday-picker">
+            <legend>
+              요일 <em>필수 · {lesson ? '한 개 선택' : '여러 개 선택 가능'}</em>
+              <strong>{selectedWeekdays.length}개 선택</strong>
+            </legend>
+            <div className="weekday-options">
+              {WEEKDAYS.map((day) => (
+                <button
+                  type="button"
+                  key={day.value}
+                  className={selectedWeekdays.includes(day.value) ? 'selected' : ''}
+                  aria-pressed={selectedWeekdays.includes(day.value)}
+                  onClick={() => toggleWeekday(day.value)}
+                >
+                  {day.short}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <div className="time-fields">
-            <label className="field day-select">
-              <span>요일</span>
-              <select value={weekday} onChange={(event) => setWeekday(Number(event.target.value) as Weekday)}>
-                {WEEKDAYS.map((day) => <option value={day.value} key={day.value}>{day.long}</option>)}
-              </select>
-            </label>
             <label className="field">
               <span>시작 시간 <small>10분 단위</small></span>
               <select value={start} onChange={(event) => setStart(event.target.value)}>
@@ -1029,15 +1061,22 @@ export default function App() {
     setLessonModal({ open: true, presetWeekday, presetStudentId: presetStudentId ?? (selectedStudentId === 'all' ? undefined : selectedStudentId) })
   }
 
-  const saveLesson = (lesson: Lesson) => {
-    setAppState((current) => ({
-      ...current,
-      lessons: current.lessons.some((item) => item.id === lesson.id)
-        ? current.lessons.map((item) => item.id === lesson.id ? lesson : item)
-        : [...current.lessons, lesson],
-    }))
+  const saveLessons = (savedLessons: Lesson[]) => {
+    setAppState((current) => {
+      const savedById = new Map(savedLessons.map((lesson) => [lesson.id, lesson]))
+      const currentIds = new Set(current.lessons.map((lesson) => lesson.id))
+      return {
+        ...current,
+        lessons: [
+          ...current.lessons.map((lesson) => savedById.get(lesson.id) ?? lesson),
+          ...savedLessons.filter((lesson) => !currentIds.has(lesson.id)),
+        ],
+      }
+    })
     setLessonModal({ open: false })
-    setNotice('수업을 시간표에 저장했습니다.')
+    setNotice(savedLessons.length > 1
+      ? `${savedLessons.length}개 요일에 수업을 저장했습니다.`
+      : '수업을 시간표에 저장했습니다.')
   }
 
   const deleteLesson = (lessonId: string) => {
@@ -1471,7 +1510,7 @@ export default function App() {
           presetStudentId={lessonModal.presetStudentId}
           presetWeekday={lessonModal.presetWeekday}
           onClose={() => setLessonModal({ open: false })}
-          onSave={saveLesson}
+          onSave={saveLessons}
           onDelete={deleteLesson}
         />
       )}
