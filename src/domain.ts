@@ -44,6 +44,34 @@ export type ScheduleColumn = {
   weekdays: Weekday[]
 }
 
+export type GroupLessonSeries = {
+  id: string
+  lessons: Lesson[]
+}
+
+export function groupLessonsBySeries(lessons: Lesson[]): GroupLessonSeries[] {
+  const series = new Map<string, Lesson[]>()
+  lessons.filter((lesson) => lesson.kind === 'group').forEach((lesson) => {
+    const id = lesson.groupSeriesId ?? lesson.id
+    series.set(id, [...(series.get(id) ?? []), lesson])
+  })
+  return [...series.entries()]
+    .map(([id, groupedLessons]) => ({
+      id,
+      lessons: [...groupedLessons].sort((first, second) => (
+        first.weekday - second.weekday || first.startMinute - second.startMinute
+      )),
+    }))
+    .sort((first, second) => {
+      const firstLesson = first.lessons[0]
+      const secondLesson = second.lessons[0]
+      if (!firstLesson || !secondLesson) return 0
+      return firstLesson.label.localeCompare(secondLesson.label, 'ko')
+        || firstLesson.weekday - secondLesson.weekday
+        || first.id.localeCompare(second.id)
+    })
+}
+
 export function getScheduleColumns(weekendMode: WeekendMode): ScheduleColumn[] {
   const weekdays = WEEKDAYS.slice(0, 5).map((day) => ({
     key: String(day.value),
@@ -238,6 +266,7 @@ export function validateState(value: unknown): value is AppState {
     if (typeof lesson.id !== 'string' || lessonIds.has(lesson.id)) return false
     lessonIds.add(lesson.id)
     if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
+    if (lesson.groupSeriesId !== undefined && typeof lesson.groupSeriesId !== 'string') return false
     if (!Array.isArray(lesson.participants)) return false
     if (lesson.kind === 'individual' && lesson.participants.length !== 1) return false
     if (lesson.kind === 'group' && lesson.participants.length < 2) return false

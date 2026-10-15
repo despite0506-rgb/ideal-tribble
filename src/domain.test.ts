@@ -4,6 +4,7 @@ import {
   getScheduleColumns,
   getStudentGradeGroup,
   gradeGroupSortValue,
+  groupLessonsBySeries,
   layoutLessons,
   lessonsForStudent,
   minutesToTime,
@@ -146,6 +147,17 @@ describe('그룹 수업 무결성', () => {
     const group = lesson('group', ['a', 'b'], 700, 760)
     expect(group.participants[0]?.transport).toEqual({ arrivalRide: true, departureRide: false })
     expect(group.participants[1]?.transport).toEqual({ arrivalRide: false, departureRide: true })
+  })
+
+  it('같은 시리즈의 요일별 수업을 하나의 그룹으로 묶는다', () => {
+    const monday = { ...lesson('monday', ['a', 'b'], 700, 760, 1), groupSeriesId: 'series-a' }
+    const thursday = { ...lesson('thursday', ['a', 'b'], 800, 870, 4), groupSeriesId: 'series-a' }
+    const legacy = lesson('legacy', ['b', 'c'], 900, 960, 2)
+    const grouped = groupLessonsBySeries([thursday, legacy, monday])
+
+    expect(grouped).toHaveLength(2)
+    expect(grouped.find((series) => series.id === 'series-a')?.lessons.map((item) => item.id)).toEqual(['monday', 'thursday'])
+    expect(grouped.find((series) => series.id === 'legacy')?.lessons).toEqual([legacy])
   })
 })
 

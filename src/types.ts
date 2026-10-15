@@ -32,6 +32,7 @@ export type Participant = {
 export type Lesson = {
   id: string
   kind: 'individual' | 'group'
+  groupSeriesId?: string
   weekday: Weekday
   startMinute: number
   endMinute: number
