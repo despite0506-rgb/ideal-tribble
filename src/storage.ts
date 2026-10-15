@@ -16,7 +16,7 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
 
-const normalizeState = (state: AppState): AppState => ({
+export const normalizeState = (state: AppState): AppState => ({
   ...state,
   students: state.students.map((student) => ({
     ...student,
@@ -31,18 +31,23 @@ const normalizeState = (state: AppState): AppState => ({
   })),
 })
 
+export function parseAppState(value: unknown): AppState | null {
+  return validateState(value) ? normalizeState(value) : null
+}
+
 export function loadState(): { state: AppState; warning: string | null } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { state: cloneDemo(), warning: null }
     const parsed: unknown = JSON.parse(raw)
-    if (!validateState(parsed)) {
+    const state = parseAppState(parsed)
+    if (!state) {
       return {
         state: cloneDemo(),
         warning: '저장된 데이터 형식을 읽을 수 없어 예시 데이터로 열었습니다. 기존 데이터는 덮어쓰지 않았습니다.',
       }
     }
-    return { state: normalizeState(parsed), warning: null }
+    return { state, warning: null }
   } catch {
     return {
       state: cloneDemo(),
@@ -66,34 +71,39 @@ export function resetState(): AppState {
   return state
 }
 
+export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
+  if (!value || typeof value !== 'object') return null
+  const settings = value as Partial<ScheduleSettings>
+  const validWeekendMode = settings.weekendMode === 'hidden' || settings.weekendMode === 'combined' || settings.weekendMode === 'separate'
+  const validTimes = Number.isInteger(settings.startMinute)
+    && Number.isInteger(settings.endMinute)
+    && Number(settings.startMinute) >= 0
+    && Number(settings.endMinute) <= 1440
+    && Number(settings.startMinute) < Number(settings.endMinute)
+  if (!validWeekendMode || !validTimes) return null
+  return {
+    academyName: typeof settings.academyName === 'string' && settings.academyName.trim()
+      ? settings.academyName.trim()
+      : DEFAULT_SCHEDULE_SETTINGS.academyName,
+    teacherNames: Array.isArray(settings.teacherNames) && settings.teacherNames.length === 3
+      ? settings.teacherNames.map((name, index) => (
+        typeof name === 'string' && name.trim() ? name.trim() : DEFAULT_SCHEDULE_SETTINGS.teacherNames[index]
+      )) as [string, string, string]
+      : DEFAULT_SCHEDULE_SETTINGS.teacherNames,
+    sidebarWidth: Number.isInteger(settings.sidebarWidth)
+      ? Math.max(190, Math.min(360, Number(settings.sidebarWidth)))
+      : DEFAULT_SCHEDULE_SETTINGS.sidebarWidth,
+    startMinute: Number(settings.startMinute),
+    endMinute: Number(settings.endMinute),
+    weekendMode: settings.weekendMode as ScheduleSettings['weekendMode'],
+  }
+}
+
 export function loadScheduleSettings(): ScheduleSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
     if (!raw) return DEFAULT_SCHEDULE_SETTINGS
-    const value = JSON.parse(raw) as Partial<ScheduleSettings>
-    const validWeekendMode = value.weekendMode === 'hidden' || value.weekendMode === 'combined' || value.weekendMode === 'separate'
-    const validTimes = Number.isInteger(value.startMinute)
-      && Number.isInteger(value.endMinute)
-      && Number(value.startMinute) >= 0
-      && Number(value.endMinute) <= 1440
-      && Number(value.startMinute) < Number(value.endMinute)
-    if (!validWeekendMode || !validTimes) return DEFAULT_SCHEDULE_SETTINGS
-    return {
-      academyName: typeof value.academyName === 'string' && value.academyName.trim()
-        ? value.academyName.trim()
-        : DEFAULT_SCHEDULE_SETTINGS.academyName,
-      teacherNames: Array.isArray(value.teacherNames) && value.teacherNames.length === 3
-        ? value.teacherNames.map((name, index) => (
-          typeof name === 'string' && name.trim() ? name.trim() : DEFAULT_SCHEDULE_SETTINGS.teacherNames[index]
-        )) as [string, string, string]
-        : DEFAULT_SCHEDULE_SETTINGS.teacherNames,
-      sidebarWidth: Number.isInteger(value.sidebarWidth)
-        ? Math.max(190, Math.min(360, Number(value.sidebarWidth)))
-        : DEFAULT_SCHEDULE_SETTINGS.sidebarWidth,
-      startMinute: Number(value.startMinute),
-      endMinute: Number(value.endMinute),
-      weekendMode: value.weekendMode,
-    } as ScheduleSettings
+    return parseScheduleSettings(JSON.parse(raw)) ?? DEFAULT_SCHEDULE_SETTINGS
   } catch {
     return DEFAULT_SCHEDULE_SETTINGS
   }

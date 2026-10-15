@@ -9,11 +9,16 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Cloud,
+  CloudOff,
   Copy,
   ExternalLink,
   LayoutDashboard,
   List,
   Link2,
+  LoaderCircle,
+  LockKeyhole,
+  LogOut,
   Maximize2,
   Minimize2,
   MessageSquare,
@@ -57,6 +62,7 @@ import {
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
 import type { AppState, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import { useCloudSync, type CloudPhase } from './useCloudSync'
 
 type View = 'schedule' | 'groups' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
@@ -1494,6 +1500,135 @@ function StudentDetail({
   )
 }
 
+function CloudAccessScreen({
+  phase,
+  error,
+  academyName,
+  studentCount,
+  lessonCount,
+  onLogin,
+  onUseLocalData,
+  onStartEmpty,
+  onRetry,
+  onLogout,
+}: {
+  phase: Exclude<CloudPhase, 'ready'>
+  error: string | null
+  academyName: string
+  studentCount: number
+  lessonCount: number
+  onLogin: (password: string) => Promise<boolean>
+  onUseLocalData: () => Promise<void>
+  onStartEmpty: () => Promise<void>
+  onRetry: () => Promise<void>
+  onLogout: () => Promise<void>
+}) {
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const submitLogin = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!password) return
+    setSubmitting(true)
+    const succeeded = await onLogin(password)
+    if (!succeeded) setPassword('')
+    setSubmitting(false)
+  }
+
+  if (phase === 'checking' || phase === 'loading') {
+    return (
+      <main className="cloud-access-page">
+        <section className="cloud-access-card cloud-loading-card" aria-live="polite">
+          <LoaderCircle className="spin" size={28} aria-hidden="true" />
+          <h1>학원 시간표를 불러오는 중입니다</h1>
+          <p>클라우드에 안전하게 연결하고 있어요.</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (phase === 'needs-initialization') {
+    return (
+      <main className="cloud-access-page">
+        <section className="cloud-access-card cloud-initialize-card">
+          <span className="cloud-access-icon"><Cloud size={27} aria-hidden="true" /></span>
+          <span className="eyebrow">FIRST CLOUD SYNC</span>
+          <h1>클라우드가 아직 비어 있습니다</h1>
+          <p>기존 학생 자료가 저장된 컴퓨터라면 아래 자료를 클라우드에 올려주세요.</p>
+          <div className="local-data-summary">
+            <div><strong>{studentCount}</strong><span>학생</span></div>
+            <div><strong>{lessonCount}</strong><span>주간 수업</span></div>
+            <div><strong>{academyName}</strong><span>현재 학원</span></div>
+          </div>
+          <button type="button" className="button primary cloud-main-action" onClick={() => void onUseLocalData()}>
+            <Cloud size={17} /> 이 컴퓨터 자료를 클라우드에 올리기
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              if (window.confirm('빈 시간표로 시작할까요? 이 컴퓨터의 기존 자료는 클라우드에 올라가지 않습니다.')) void onStartEmpty()
+            }}
+          >
+            빈 시간표로 새로 시작
+          </button>
+          <p className="cloud-safety-note">다른 컴퓨터에 기존 자료가 있다면 여기서 시작하지 말고, 해당 컴퓨터에서 먼저 로그인해 주세요.</p>
+          <button type="button" className="cloud-logout-link" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button>
+        </section>
+      </main>
+    )
+  }
+
+  if (phase === 'error') {
+    return (
+      <main className="cloud-access-page">
+        <section className="cloud-access-card">
+          <span className="cloud-access-icon error"><CloudOff size={27} aria-hidden="true" /></span>
+          <h1>클라우드 연결을 확인해 주세요</h1>
+          <p className="cloud-access-error" role="alert">{error}</p>
+          <button type="button" className="button primary cloud-main-action" onClick={() => void onRetry()}>다시 연결</button>
+          <button type="button" className="cloud-logout-link" onClick={() => void onLogout()}><LogOut size={14} /> 로그아웃</button>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="cloud-access-page">
+      <section className="cloud-access-card">
+        <div className="cloud-login-brand">
+          <span>{academyName.trim().slice(0, 1) || '학'}</span>
+          <div><strong>{academyName}</strong><small>Academy Planner</small></div>
+        </div>
+        <span className="cloud-access-icon"><LockKeyhole size={27} aria-hidden="true" /></span>
+        <span className="eyebrow">SHARED ACCESS</span>
+        <h1>학원 공용 비밀번호</h1>
+        <p>선생님들이 함께 사용하는 비밀번호를 입력하세요. 이 기기에서는 로그인 상태가 유지됩니다.</p>
+        <form className="cloud-login-form" onSubmit={submitLogin}>
+          <label>
+            <span>공용 비밀번호</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              autoFocus
+              placeholder="비밀번호 입력"
+              required
+            />
+          </label>
+          {error && <p className="cloud-access-error" role="alert">{error}</p>}
+          <button type="submit" className="button primary cloud-main-action" disabled={submitting || !password}>
+            {submitting ? <LoaderCircle className="spin" size={17} /> : <LockKeyhole size={17} />}
+            시간표 열기
+          </button>
+        </form>
+        <p className="cloud-safety-note">비밀번호는 Supabase 인증 서버에서 확인되며 이 웹사이트 코드에 저장되지 않습니다.</p>
+      </section>
+    </main>
+  )
+}
+
 export default function App() {
   const initial = useMemo(() => loadState(), [])
   const [appState, setAppState] = useState<AppState>(initial.state)
@@ -1516,6 +1651,7 @@ export default function App() {
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
   const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const cloud = useCloudSync({ appState, setAppState, scheduleSettings, setScheduleSettings })
 
   useEffect(() => {
     if (!storageEnabled) return
@@ -1794,6 +1930,23 @@ export default function App() {
     ? groupSeries.find((series) => series.id === groupMembersModalId)
     : undefined
 
+  if (cloud.phase !== 'ready') {
+    return (
+      <CloudAccessScreen
+        phase={cloud.phase}
+        error={cloud.error}
+        academyName={scheduleSettings.academyName}
+        studentCount={appState.students.length}
+        lessonCount={appState.lessons.length}
+        onLogin={cloud.login}
+        onUseLocalData={cloud.initializeWithLocalData}
+        onStartEmpty={cloud.initializeEmpty}
+        onRetry={cloud.retry}
+        onLogout={cloud.logout}
+      />
+    )
+  }
+
   return (
     <div
       className="app-shell"
@@ -1852,7 +2005,15 @@ export default function App() {
         </div>
         <div className="sidebar-footer">
           <button type="button" onClick={handleReset}><RotateCcw size={15} /> 예시 데이터로 초기화</button>
-          <small>이 브라우저에 자동 저장됩니다.</small>
+          <div className={`cloud-sync-status ${cloud.saveStatus}`} title={cloud.error ?? undefined}>
+            {cloud.saveStatus === 'error' ? <CloudOff size={14} /> : cloud.saveStatus === 'saving' ? <LoaderCircle className="spin" size={14} /> : <Cloud size={14} />}
+            <span>
+              <strong>{cloud.saveStatus === 'saving' ? '클라우드 저장 중' : cloud.saveStatus === 'error' ? '클라우드 연결 확인' : '클라우드 저장됨'}</strong>
+              <small>{cloud.lastSavedAt ? `${new Date(cloud.lastSavedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 동기화` : '자동 동기화 사용 중'}</small>
+            </span>
+            <button type="button" onClick={() => void cloud.logout()} aria-label="클라우드 로그아웃" title="로그아웃"><LogOut size={13} /></button>
+          </div>
+          <small>클라우드와 이 브라우저에 자동 저장됩니다.</small>
         </div>
         <button
           type="button"
@@ -1905,6 +2066,14 @@ export default function App() {
               </button>
             )}
             <button type="button" className="banner-close" onClick={() => setStorageWarning(null)} aria-label="알림 닫기"><X size={16} /></button>
+          </div>
+        )}
+
+        {cloud.saveStatus === 'error' && cloud.error && (
+          <div className="warning-banner cloud-warning" role="alert">
+            <CloudOff size={16} aria-hidden="true" />
+            <span>{cloud.error} 변경 내용은 이 브라우저에 보관되어 있습니다.</span>
+            <button type="button" onClick={cloud.retrySave}>다시 저장</button>
           </div>
         )}
 

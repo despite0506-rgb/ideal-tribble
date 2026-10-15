@@ -16,6 +16,17 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: true,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/@supabase/')) return 'supabase'
+          if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'react'
+          if (id.includes('/node_modules/lucide-react/')) return 'icons'
+        },
+      },
+    },
+  },
   test: {
     environment: 'node',
   },
