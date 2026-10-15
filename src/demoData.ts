@@ -26,7 +26,7 @@ const lesson = (
   label: string,
   participants: Participant[],
   note = '',
-): Lesson => ({ id, kind, weekday, startMinute, endMinute, label, participants, note, createdAt })
+): Lesson => ({ id, kind, teacherId: 'teacher-1', weekday, startMinute, endMinute, label, participants, note, createdAt })
 
 export const DEMO_STATE: AppState = {
   schemaVersion: 1,

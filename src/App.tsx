@@ -17,6 +17,7 @@ import {
   Maximize2,
   Minimize2,
   MessageSquare,
+  Palette,
   Pencil,
   Plus,
   RotateCcw,
@@ -55,7 +56,7 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 
 type View = 'schedule' | 'groups' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
@@ -85,6 +86,11 @@ const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index
 const SIDEBAR_MIN_WIDTH = 190
 const SIDEBAR_MAX_WIDTH = 360
 const SIDEBAR_DEFAULT_WIDTH = 264
+const TEACHERS: { id: TeacherId; index: 0 | 1 | 2 }[] = [
+  { id: 'teacher-1', index: 0 },
+  { id: 'teacher-2', index: 1 },
+  { id: 'teacher-3', index: 2 },
+]
 const SCHOOL_GROUPS = [
   { label: '초등학교', schools: ['청운초', '북삼초', '북평초', '삼육초'] },
   { label: '중학교', schools: ['광희중', '북평중', '예람중', '삼육중'] },
@@ -119,7 +125,11 @@ function initials(name: string): string {
 }
 
 function transportText(transport: Transport): string {
-  return `등원 ${transport.arrivalRide ? '이용' : '미이용'}, 하원 ${transport.departureRide ? '이용' : '미이용'}`
+  const rides = [
+    transport.arrivalRide ? `등원${Number.isInteger(transport.arrivalMinute) ? ` ${minutesToTime(transport.arrivalMinute as number)}` : ''}` : '',
+    transport.departureRide ? `하원${Number.isInteger(transport.departureMinute) ? ` ${minutesToTime(transport.departureMinute as number)}` : ''}` : '',
+  ].filter(Boolean)
+  return rides.length > 0 ? rides.join(', ') : '차량 미이용'
 }
 
 function isValidNotionUrl(value: string): boolean {
@@ -149,16 +159,21 @@ function Avatar({ student, size = 'md' }: { student: Student; size?: 'sm' | 'md'
 }
 
 function RidePills({ transport, compact = false }: { transport: Transport; compact?: boolean }) {
+  if (!transport.arrivalRide && !transport.departureRide) return null
   return (
     <span className={`ride-pills${compact ? ' ride-pills-compact' : ''}`}>
-      <span className={`ride-pill ${transport.arrivalRide ? 'ride-on arrival' : 'ride-off'}`}>
-        <ArrowDown size={11} aria-hidden="true" />
-        <span>{compact ? `등원 ${transport.arrivalRide ? 'O' : 'X'}` : `등원 ${transport.arrivalRide ? 'O' : 'X'}`}</span>
-      </span>
-      <span className={`ride-pill ${transport.departureRide ? 'ride-on departure' : 'ride-off'}`}>
-        <ArrowUp size={11} aria-hidden="true" />
-        <span>{compact ? `하원 ${transport.departureRide ? 'O' : 'X'}` : `하원 ${transport.departureRide ? 'O' : 'X'}`}</span>
-      </span>
+      {transport.arrivalRide && (
+        <span className="ride-pill ride-on arrival">
+          <ArrowDown size={11} aria-hidden="true" />
+          <span>{Number.isInteger(transport.arrivalMinute) ? `등원 ${minutesToTime(transport.arrivalMinute as number)}` : '등원'}</span>
+        </span>
+      )}
+      {transport.departureRide && (
+        <span className="ride-pill ride-on departure">
+          <ArrowUp size={11} aria-hidden="true" />
+          <span>{Number.isInteger(transport.departureMinute) ? `하원 ${minutesToTime(transport.departureMinute as number)}` : '하원'}</span>
+        </span>
+      )}
     </span>
   )
 }
@@ -166,10 +181,11 @@ function RidePills({ transport, compact = false }: { transport: Transport; compa
 function LessonRideSummary({ lesson }: { lesson: Lesson }) {
   const arrivalCount = lesson.participants.filter((participant) => participant.transport.arrivalRide).length
   const departureCount = lesson.participants.filter((participant) => participant.transport.departureRide).length
+  if (arrivalCount === 0 && departureCount === 0) return null
   return (
     <span className="lesson-ride-summary" aria-label={`등원차량 ${arrivalCount}명, 하원차량 ${departureCount}명`}>
-      <span className={arrivalCount ? 'active arrival' : ''} title={`등원차량 ${arrivalCount}명`}><ArrowDown size={9} />{arrivalCount}</span>
-      <span className={departureCount ? 'active departure' : ''} title={`하원차량 ${departureCount}명`}><ArrowUp size={9} />{departureCount}</span>
+      {arrivalCount > 0 && <span className="active arrival" title={`등원차량 ${arrivalCount}명`}><ArrowDown size={9} />{arrivalCount}</span>}
+      {departureCount > 0 && <span className="active departure" title={`하원차량 ${departureCount}명`}><ArrowUp size={9} />{departureCount}</span>}
     </span>
   )
 }
@@ -206,7 +222,7 @@ function LessonCardContent({
         <span>{participants.map(({ student }) => student.name).join(' · ')}</span>
       </div>
       <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
-        {participants.map(({ participant, student }) => (
+        {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
           <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
             {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
             <RidePills transport={participant.transport} compact />
@@ -640,11 +656,11 @@ function StudentModal({
 }
 
 function BulkStudentModal({
-  existingStudentCount,
+  existingStudents,
   onClose,
   onSave,
 }: {
-  existingStudentCount: number
+  existingStudents: Student[]
   onClose: () => void
   onSave: (students: Student[]) => void
 }) {
@@ -672,12 +688,22 @@ function BulkStudentModal({
       return
     }
     const createdAt = new Date().toISOString()
-    onSave(completedRows.map((row, index) => ({
+    const schoolColors = new Map<string, string>()
+    existingStudents.forEach((student) => {
+      if (student.school && !schoolColors.has(student.school)) schoolColors.set(student.school, student.color)
+    })
+    let nextColorIndex = existingStudents.length
+    onSave(completedRows.map((row) => ({
       id: createId('student'),
       name: row.name.trim(),
       school: row.school,
       grade: row.grade,
-      color: STUDENT_COLORS[(existingStudentCount + index) % STUDENT_COLORS.length] ?? '#2f6f68',
+      color: schoolColors.get(row.school) ?? (() => {
+        const color = STUDENT_COLORS[nextColorIndex % STUDENT_COLORS.length] ?? '#2f6f68'
+        nextColorIndex += 1
+        schoolColors.set(row.school, color)
+        return color
+      })(),
       defaultTransport: { arrivalRide: false, departureRide: false },
       notionUrl: '',
       feedbacks: [],
@@ -731,6 +757,60 @@ function BulkStudentModal({
   )
 }
 
+function SchoolColorModal({
+  students,
+  onClose,
+  onSave,
+}: {
+  students: Student[]
+  onClose: () => void
+  onSave: (colors: Record<string, string>) => void
+}) {
+  const schools = [...new Set(students.map((student) => student.school).filter(Boolean))].sort((first, second) => (
+    first.localeCompare(second, 'ko')
+  ))
+  const [colors, setColors] = useState<Record<string, string>>(() => Object.fromEntries(
+    schools.map((school) => [school, students.find((student) => student.school === school)?.color ?? '#2f6f68']),
+  ))
+
+  return (
+    <ModalFrame title="학교별 학생 색상" eyebrow="같은 학교는 같은 색으로 일괄 적용" onClose={onClose} wide>
+      <form onSubmit={(event) => { event.preventDefault(); onSave(colors) }}>
+        <div className="modal-body">
+          <p className="school-color-guide">학교마다 대표 색상을 하나씩 선택하세요. 저장하면 해당 학교 학생 전체의 색상이 함께 변경됩니다.</p>
+          <div className="school-color-list">
+            {schools.map((school) => (
+              <fieldset key={school}>
+                <legend><strong>{school}</strong><span>{students.filter((student) => student.school === school).length}명</span></legend>
+                <div className="school-color-options">
+                  {STUDENT_COLORS.map((color) => (
+                    <button
+                      type="button"
+                      key={color}
+                      className={colors[school] === color ? 'selected' : ''}
+                      style={{ '--student-color': color } as CSSProperties}
+                      onClick={() => setColors((current) => ({ ...current, [school]: color }))}
+                      aria-label={`${school} 색상 ${color}`}
+                      aria-pressed={colors[school] === color}
+                    >
+                      {colors[school] === color && <Check size={13} />}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        </div>
+        <footer className="modal-footer">
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onClose}>취소</button>
+          <button type="submit" className="button primary">학교별 색상 적용</button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function LessonModal({
   lesson,
   students,
@@ -738,6 +818,7 @@ function LessonModal({
   presetStudentId,
   presetWeekday,
   presetKind,
+  teacherId,
   onClose,
   onSave,
   onDelete,
@@ -748,6 +829,7 @@ function LessonModal({
   presetStudentId?: string
   presetWeekday?: Weekday
   presetKind?: Lesson['kind']
+  teacherId: TeacherId
   onClose: () => void
   onSave: (lessons: Lesson[]) => void
   onDelete: (lessonId: string) => void
@@ -771,12 +853,29 @@ function LessonModal({
   const [note, setNote] = useState(lesson?.note ?? '')
   const [participantIds, setParticipantIds] = useState<string[]>(initialParticipantIds)
   const [rides, setRides] = useState<Record<string, Transport>>(initialRides)
+  const [weekdayRides, setWeekdayRides] = useState<Partial<Record<Weekday, Record<string, Transport>>>>({
+    [initialWeekday]: initialRides,
+  })
   const [errors, setErrors] = useState<string[]>([])
 
-  const rideFor = (studentId: string): Transport => {
-    return rides[studentId] ?? studentById(students, studentId)?.defaultTransport ?? { arrivalRide: false, departureRide: false }
+  const rideFor = (studentId: string, weekday?: Weekday): Transport => {
+    const weekdayTransport = weekday === undefined ? undefined : weekdayRides[weekday]?.[studentId]
+    return weekdayTransport
+      ?? rides[studentId]
+      ?? studentById(students, studentId)?.defaultTransport
+      ?? { arrivalRide: false, departureRide: false }
   }
-  const updateRide = (studentId: string, patch: Partial<Transport>) => {
+  const updateRide = (studentId: string, patch: Partial<Transport>, weekday?: Weekday) => {
+    if (weekday !== undefined && kind === 'group') {
+      setWeekdayRides((current) => ({
+        ...current,
+        [weekday]: {
+          ...(current[weekday] ?? {}),
+          [studentId]: { ...rideFor(studentId, weekday), ...patch },
+        },
+      }))
+      return
+    }
     setRides((current) => ({ ...current, [studentId]: { ...rideFor(studentId), ...patch } }))
   }
 
@@ -812,12 +911,30 @@ function LessonModal({
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const groupSeriesId = kind === 'group' ? (lesson?.groupSeriesId ?? createId('group')) : undefined
-    const sharedDraft: Omit<LessonDraft, 'weekday' | 'startMinute' | 'endMinute'> = {
+    const sharedDraft: Omit<LessonDraft, 'weekday' | 'startMinute' | 'endMinute' | 'participants'> = {
       kind,
       groupSeriesId,
+      teacherId: lesson?.teacherId ?? teacherId,
       label: label.trim(),
       note: note.trim(),
-      participants: participantIds.map((studentId) => ({ studentId, transport: rideFor(studentId) })),
+    }
+    const participantsForWeekday = (weekday: Weekday) => {
+      const lessonTime = weekdayTimes[weekday] ?? { start, end }
+      return participantIds.map((studentId) => {
+        const transport = rideFor(studentId, kind === 'group' ? weekday : undefined)
+        return {
+          studentId,
+          transport: kind === 'group' ? {
+            ...transport,
+            arrivalMinute: transport.arrivalRide
+              ? transport.arrivalMinute ?? timeToMinutes(lessonTime.start)
+              : transport.arrivalMinute,
+            departureMinute: transport.departureRide
+              ? transport.departureMinute ?? timeToMinutes(lessonTime.end)
+              : transport.departureMinute,
+          } : transport,
+        }
+      })
     }
     const nextErrors = selectedWeekdays.length === 0
       ? ['요일을 한 개 이상 선택해 주세요.']
@@ -829,6 +946,7 @@ function LessonModal({
           weekday,
           startMinute: timeToMinutes(time.start),
           endMinute: timeToMinutes(time.end),
+          participants: participantsForWeekday(weekday),
         }, students, lessons, lesson?.id)
           .map((error) => error.includes('겹칩니다') ? `${dayName}: ${error}` : error)
       }))]
@@ -845,6 +963,7 @@ function LessonModal({
         weekday,
         startMinute: timeToMinutes(time.start),
         endMinute: timeToMinutes(time.end),
+        participants: participantsForWeekday(weekday),
         id: lesson?.id ?? createId('lesson'),
         createdAt,
       }
@@ -974,8 +1093,52 @@ function LessonModal({
           {participantIds.length > 0 && (
             <fieldset className="participant-rides">
               <legend><Bus size={16} /> 학생별 차량 이용</legend>
-              <p>이 수업에 적용할 등원·하원 차량을 각각 설정하세요.</p>
-              {participantIds.map((studentId) => {
+              <p>{kind === 'group' ? '요일마다 학생별 차량 이용과 실제 등원·하원 시간을 설정하세요.' : '이 수업에 적용할 등원·하원 차량을 각각 설정하세요.'}</p>
+              {kind === 'group' ? selectedWeekdays.map((weekday) => {
+                const day = WEEKDAYS.find((item) => item.value === weekday)
+                const lessonTime = weekdayTimes[weekday] ?? { start, end }
+                return (
+                  <section className="participant-ride-day" key={weekday}>
+                    <header><strong>{day?.long}</strong><span>{lessonTime.start}–{lessonTime.end}</span></header>
+                    {participantIds.map((studentId) => {
+                      const student = studentById(students, studentId)
+                      if (!student) return null
+                      const transport = rideFor(studentId, weekday)
+                      return (
+                        <div className="participant-ride-row group-ride-row" key={studentId}>
+                          <div className="participant-name"><Avatar student={student} size="sm" /><span><strong>{student.name}</strong><small>{student.school}</small></span></div>
+                          <div className="participant-ride-setting">
+                            <Toggle
+                              label="등원차량"
+                              checked={transport.arrivalRide}
+                              onChange={(arrivalRide) => updateRide(studentId, {
+                                arrivalRide,
+                                arrivalMinute: transport.arrivalMinute ?? timeToMinutes(lessonTime.start),
+                              }, weekday)}
+                            />
+                            {transport.arrivalRide && (
+                              <label><span>실제 등원</span><select value={transport.arrivalMinute ?? timeToMinutes(lessonTime.start)} onChange={(event) => updateRide(studentId, { arrivalMinute: Number(event.target.value) }, weekday)}>{TEN_MINUTE_OPTIONS.map((minute) => <option value={minute} key={minute}>{minutesToTime(minute)}</option>)}</select></label>
+                            )}
+                          </div>
+                          <div className="participant-ride-setting">
+                            <Toggle
+                              label="하원차량"
+                              checked={transport.departureRide}
+                              onChange={(departureRide) => updateRide(studentId, {
+                                departureRide,
+                                departureMinute: transport.departureMinute ?? timeToMinutes(lessonTime.end),
+                              }, weekday)}
+                            />
+                            {transport.departureRide && (
+                              <label><span>실제 하원</span><select value={transport.departureMinute ?? timeToMinutes(lessonTime.end)} onChange={(event) => updateRide(studentId, { departureMinute: Number(event.target.value) }, weekday)}>{TEN_MINUTE_OPTIONS.map((minute) => <option value={minute} key={minute}>{minutesToTime(minute)}</option>)}</select></label>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </section>
+                )
+              }) : participantIds.map((studentId) => {
                 const student = studentById(students, studentId)
                 if (!student) return null
                 const transport = rideFor(studentId)
@@ -1178,6 +1341,7 @@ function StudentDetail({
   student,
   lessons,
   allStudents,
+  teacherNames,
   onBack,
   onEdit,
   onAddLesson,
@@ -1189,6 +1353,7 @@ function StudentDetail({
   student: Student
   lessons: Lesson[]
   allStudents: Student[]
+  teacherNames: ScheduleSettings['teacherNames']
   onBack: () => void
   onEdit: () => void
   onAddLesson: () => void
@@ -1270,6 +1435,7 @@ function StudentDetail({
             <div className="student-lesson-list">
               {lessons.map((lesson) => {
                 const participant = lesson.participants.find((item) => item.studentId === student.id)
+                const teacherIndex = TEACHERS.find((teacher) => teacher.id === lesson.teacherId)?.index ?? 0
                 const people = lesson.participants
                   .map((item) => studentById(allStudents, item.studentId)?.name)
                   .filter(Boolean)
@@ -1277,7 +1443,7 @@ function StudentDetail({
                 return (
                   <button type="button" key={lesson.id} onClick={() => onOpenLesson(lesson.id)}>
                     <span className="student-lesson-day">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.short}</span>
-                    <span className="student-lesson-main"><strong>{lesson.label}</strong><small>{minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)} · {people}</small></span>
+                    <span className="student-lesson-main"><strong>{lesson.label}</strong><small>{teacherNames[teacherIndex]} · {minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)} · {people}</small></span>
                     {lesson.kind === 'group' && <span className="student-group-badge">그룹 {lesson.participants.length}인</span>}
                     {participant && <RidePills transport={participant.transport} compact />}
                     <Pencil size={14} aria-hidden="true" />
@@ -1326,6 +1492,7 @@ export default function App() {
   const [storageEnabled, setStorageEnabled] = useState(!initial.warning)
   const [storageWarning, setStorageWarning] = useState(initial.warning)
   const [view, setView] = useState<View>('schedule')
+  const [activeTeacherId, setActiveTeacherId] = useState<TeacherId>('teacher-1')
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
@@ -1339,6 +1506,7 @@ export default function App() {
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
+  const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
@@ -1384,10 +1552,14 @@ export default function App() {
     const normalized = studentPageQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalized)
   })
-  const groupSeries = useMemo(() => groupLessonsBySeries(appState.lessons), [appState.lessons])
+  const teacherLessons = useMemo(() => (
+    appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
+  ), [appState.lessons, activeTeacherId])
+  const groupSeries = useMemo(() => groupLessonsBySeries(teacherLessons), [teacherLessons])
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
-  const visibleLessons = selectedStudent ? lessonsForStudent(appState.lessons, selectedStudent.id) : appState.lessons
+  const activeTeacherName = scheduleSettings.teacherNames[TEACHERS.find((teacher) => teacher.id === activeTeacherId)?.index ?? 0]
+  const visibleLessons = selectedStudent ? lessonsForStudent(teacherLessons, selectedStudent.id) : teacherLessons
   const displayedWeekdays = getScheduleColumns(scheduleSettings.weekendMode).flatMap((column) => column.weekdays)
   const outsideDisplayCount = visibleLessons.filter((lesson) => (
     !displayedWeekdays.includes(lesson.weekday)
@@ -1395,7 +1567,7 @@ export default function App() {
     || lesson.startMinute >= scheduleSettings.endMinute
   )).length
   const today = getTodayWeekday()
-  const todayLessons = appState.lessons.filter((lesson) => lesson.weekday === today)
+  const todayLessons = teacherLessons.filter((lesson) => lesson.weekday === today)
   const todayRideCount = todayLessons.reduce(
     (count, lesson) => count + lesson.participants.filter((participant) => participant.transport.arrivalRide || participant.transport.departureRide).length,
     0,
@@ -1455,6 +1627,18 @@ export default function App() {
     setAppState((current) => ({ ...current, students: [...current.students, ...students] }))
     setBulkStudentModalOpen(false)
     setNotice(`${students.length}명의 학생을 등록했습니다.`)
+  }
+
+  const saveSchoolColors = (colors: Record<string, string>) => {
+    setAppState((current) => ({
+      ...current,
+      students: current.students.map((student) => ({
+        ...student,
+        color: colors[student.school] ?? student.color,
+      })),
+    }))
+    setSchoolColorModalOpen(false)
+    setNotice('학교별 학생 색상을 일괄 적용했습니다.')
   }
 
   const saveGroupMembers = (seriesId: string, studentIds: string[]) => {
@@ -1535,6 +1719,7 @@ export default function App() {
     setStorageWarning(null)
     setSelectedStudentId('all')
     setDetailStudentId(null)
+    setActiveTeacherId('teacher-1')
     setNotice('예시 데이터로 초기화했습니다.')
   }
 
@@ -1543,6 +1728,14 @@ export default function App() {
       ...current,
       sidebarWidth: Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width))),
     }))
+  }
+
+  const updateTeacherName = (index: 0 | 1 | 2, name: string) => {
+    setScheduleSettings((current) => {
+      const teacherNames = [...current.teacherNames] as [string, string, string]
+      teacherNames[index] = name
+      return { ...current, teacherNames }
+    })
   }
 
   const startSidebarResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1626,11 +1819,11 @@ export default function App() {
             onClick={() => { setSelectedStudentId('all'); setView('schedule') }}
           >
             <span className="all-avatar"><CalendarDays size={15} /></span>
-            <span><strong>전체 시간표</strong><small>{appState.lessons.length}개 수업</small></span>
+            <span><strong>전체 시간표</strong><small>{teacherLessons.length}개 수업</small></span>
             {selectedStudentId === 'all' && <Check size={15} />}
           </button>
           {filteredStudents.map((student) => {
-            const count = lessonsForStudent(appState.lessons, student.id).length
+            const count = lessonsForStudent(teacherLessons, student.id).length
             return (
               <button
                 type="button"
@@ -1672,9 +1865,9 @@ export default function App() {
           <div className="topbar-title">
             <span className="eyebrow">ACADEMY SCHEDULE</span>
             <h1>{view === 'schedule'
-              ? (selectedStudent ? `${selectedStudent.name} 시간표` : '전체 시간표')
+              ? (selectedStudent ? `${selectedStudent.name} · ${activeTeacherName}` : `${activeTeacherName} 시간표`)
               : view === 'groups'
-                ? '그룹 수업 관리'
+                ? `${activeTeacherName} 그룹 수업`
                 : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
             <p>{view === 'schedule'
               ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.'
@@ -1704,6 +1897,30 @@ export default function App() {
           </div>
         )}
 
+        <section className="teacher-switcher" aria-label="선생님 시간표 선택">
+          <div className="teacher-switcher-label">
+            <CalendarDays size={16} />
+            <span><strong>선생님 시간표</strong><small>학생 목록은 3명이 함께 사용</small></span>
+          </div>
+          <div className="teacher-switcher-buttons">
+            {TEACHERS.map((teacher) => {
+              const lessonCount = appState.lessons.filter((lesson) => lesson.teacherId === teacher.id).length
+              return (
+                <button
+                  type="button"
+                  key={teacher.id}
+                  className={activeTeacherId === teacher.id ? 'active' : ''}
+                  onClick={() => setActiveTeacherId(teacher.id)}
+                  aria-pressed={activeTeacherId === teacher.id}
+                >
+                  <span>{scheduleSettings.teacherNames[teacher.index]}</span>
+                  <small>{lessonCount}개 수업</small>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
         {view === 'schedule' ? (
           <>
             <StudentQuickLinks students={appState.students} onOpenStudent={showStudentDetail} />
@@ -1715,7 +1932,7 @@ export default function App() {
                   <p>
                     {selectedStudent
                       ? `${selectedStudent.school} ${selectedStudent.grade} · 수업 ${visibleLessons.length}개`
-                      : `전체 ${appState.students.length}명 · 수업 ${appState.lessons.length}개`}
+                      : `공유 학생 ${appState.students.length}명 · 수업 ${teacherLessons.length}개`}
                   </p>
                 </div>
                 <div className="toolbar-actions">
@@ -1756,6 +1973,24 @@ export default function App() {
                       aria-label="학원 이름"
                     />
                   </label>
+                  <fieldset className="teacher-name-settings">
+                    <legend className="settings-label">선생님 이름</legend>
+                    <div>
+                      {TEACHERS.map((teacher) => (
+                        <input
+                          key={teacher.id}
+                          value={scheduleSettings.teacherNames[teacher.index]}
+                          maxLength={12}
+                          onChange={(event) => updateTeacherName(teacher.index, event.target.value)}
+                          onBlur={(event) => updateTeacherName(
+                            teacher.index,
+                            event.target.value.trim() || `선생님 ${teacher.index + 1}`,
+                          )}
+                          aria-label={`${teacher.index + 1}번 선생님 이름`}
+                        />
+                      ))}
+                    </div>
+                  </fieldset>
                   <div className="settings-time-range">
                     <span className="settings-label">보이는 시간</span>
                     <label>
@@ -1830,7 +2065,7 @@ export default function App() {
             <section className="stats-grid stats-grid-bottom" aria-label="오늘의 요약">
               <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
               <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
-              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={appState.lessons.filter((lesson) => lesson.kind === 'group').length} hint="주간 그룹 일정" tone="purple" />
+              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={teacherLessons.filter((lesson) => lesson.kind === 'group').length} hint="선택 시간표" tone="purple" />
               <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
             </section>
           </>
@@ -1846,7 +2081,10 @@ export default function App() {
           <section className="students-page">
             <div className="students-toolbar">
               <label className="page-search"><Search size={17} /><input value={studentPageQuery} onChange={(event) => setStudentPageQuery(event.target.value)} placeholder="이름, 학교, 학년으로 검색" aria-label="학생 목록 검색" /></label>
-              <span>{pageStudents.length}명의 학생</span>
+              <div className="students-toolbar-actions">
+                <span>{pageStudents.length}명의 공유 학생</span>
+                <button type="button" className="button secondary" onClick={() => setSchoolColorModalOpen(true)}><Palette size={15} /> 학교별 색상</button>
+              </div>
             </div>
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
@@ -1889,6 +2127,7 @@ export default function App() {
             student={detailStudent}
             lessons={lessonsForStudent(appState.lessons, detailStudent.id)}
             allStudents={appState.students}
+            teacherNames={scheduleSettings.teacherNames}
             onBack={() => setView('students')}
             onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
             onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
@@ -1923,6 +2162,7 @@ export default function App() {
           presetStudentId={lessonModal.presetStudentId}
           presetWeekday={lessonModal.presetWeekday}
           presetKind={lessonModal.presetKind}
+          teacherId={activeTeacherId}
           onClose={() => setLessonModal({ open: false })}
           onSave={saveLessons}
           onDelete={deleteLesson}
@@ -1939,9 +2179,16 @@ export default function App() {
       )}
       {bulkStudentModalOpen && (
         <BulkStudentModal
-          existingStudentCount={appState.students.length}
+          existingStudents={appState.students}
           onClose={() => setBulkStudentModalOpen(false)}
           onSave={saveBulkStudents}
+        />
+      )}
+      {schoolColorModalOpen && (
+        <SchoolColorModal
+          students={appState.students}
+          onClose={() => setSchoolColorModalOpen(false)}
+          onSave={saveSchoolColors}
         />
       )}
       {activeGroupSeries && (

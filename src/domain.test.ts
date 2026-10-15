@@ -35,6 +35,7 @@ const lesson = (
 ): Lesson => ({
   id,
   kind: studentIds.length >= 2 ? 'group' : 'individual',
+  teacherId: 'teacher-1',
   weekday,
   startMinute,
   endMinute,
@@ -213,5 +214,11 @@ describe('저장 데이터 검증', () => {
   it('0분 수업과 잘못된 그룹 인원을 거절한다', () => {
     expect(validateState({ ...validState, lessons: [lesson('zero', ['a'], 600, 600)] })).toBe(false)
     expect(validateState({ ...validState, lessons: [{ ...lesson('bad', ['a'], 600, 660), kind: 'group' }] })).toBe(false)
+  })
+
+  it('세 선생님 시간표 id만 허용하고 기존 데이터의 누락은 마이그레이션용으로 허용한다', () => {
+    const { teacherId: _teacherId, ...legacyLesson } = lesson('legacy', ['a'], 600, 660)
+    expect(validateState({ ...validState, lessons: [legacyLesson] })).toBe(true)
+    expect(validateState({ ...validState, lessons: [{ ...lesson('bad-teacher', ['a'], 600, 660), teacherId: 'teacher-4' }] })).toBe(false)
   })
 })

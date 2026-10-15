@@ -1,8 +1,11 @@
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type TeacherId = 'teacher-1' | 'teacher-2' | 'teacher-3'
 
 export type Transport = {
   arrivalRide: boolean
   departureRide: boolean
+  arrivalMinute?: number
+  departureMinute?: number
 }
 
 export type FeedbackEntry = {
@@ -33,6 +36,7 @@ export type Lesson = {
   id: string
   kind: 'individual' | 'group'
   groupSeriesId?: string
+  teacherId: TeacherId
   weekday: Weekday
   startMinute: number
   endMinute: number
@@ -52,6 +56,7 @@ export type WeekendMode = 'hidden' | 'combined' | 'separate'
 
 export type ScheduleSettings = {
   academyName: string
+  teacherNames: [string, string, string]
   sidebarWidth: number
   startMinute: number
   endMinute: number

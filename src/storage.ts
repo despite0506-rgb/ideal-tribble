@@ -1,12 +1,13 @@
 import { DEMO_STATE } from './demoData'
 import { validateState } from './domain'
-import type { AppState, ScheduleSettings } from './types'
+import type { AppState, ScheduleSettings, TeacherId } from './types'
 
 export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
 export const SETTINGS_STORAGE_KEY = 'ideal-tribble:schedule-settings:v1'
 
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   academyName: '우리 학원',
+  teacherNames: ['선생님 1', '선생님 2', '선생님 3'],
   sidebarWidth: 264,
   startMinute: 13 * 60,
   endMinute: 22 * 60,
@@ -21,6 +22,12 @@ const normalizeState = (state: AppState): AppState => ({
     ...student,
     notionUrl: typeof student.notionUrl === 'string' ? student.notionUrl : '',
     feedbacks: Array.isArray(student.feedbacks) ? student.feedbacks : [],
+  })),
+  lessons: state.lessons.map((lesson) => ({
+    ...lesson,
+    teacherId: (['teacher-1', 'teacher-2', 'teacher-3'] as TeacherId[]).includes(lesson.teacherId)
+      ? lesson.teacherId
+      : 'teacher-1',
   })),
 })
 
@@ -75,6 +82,11 @@ export function loadScheduleSettings(): ScheduleSettings {
       academyName: typeof value.academyName === 'string' && value.academyName.trim()
         ? value.academyName.trim()
         : DEFAULT_SCHEDULE_SETTINGS.academyName,
+      teacherNames: Array.isArray(value.teacherNames) && value.teacherNames.length === 3
+        ? value.teacherNames.map((name, index) => (
+          typeof name === 'string' && name.trim() ? name.trim() : DEFAULT_SCHEDULE_SETTINGS.teacherNames[index]
+        )) as [string, string, string]
+        : DEFAULT_SCHEDULE_SETTINGS.teacherNames,
       sidebarWidth: Number.isInteger(value.sidebarWidth)
         ? Math.max(190, Math.min(360, Number(value.sidebarWidth)))
         : DEFAULT_SCHEDULE_SETTINGS.sidebarWidth,

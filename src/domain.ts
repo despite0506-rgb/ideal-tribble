@@ -267,6 +267,7 @@ export function validateState(value: unknown): value is AppState {
     lessonIds.add(lesson.id)
     if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
     if (lesson.groupSeriesId !== undefined && typeof lesson.groupSeriesId !== 'string') return false
+    if (lesson.teacherId !== undefined && !['teacher-1', 'teacher-2', 'teacher-3'].includes(lesson.teacherId)) return false
     if (!Array.isArray(lesson.participants)) return false
     if (lesson.kind === 'individual' && lesson.participants.length !== 1) return false
     if (lesson.kind === 'group' && lesson.participants.length < 2) return false
