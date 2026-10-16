@@ -57,6 +57,12 @@ export const DEFAULT_LESSON_COLORS = {
   high: '#e3b84f',
 } as const
 
+export const DEFAULT_KOREAN_LESSON_COLORS = {
+  elementary: '#ef6fa3',
+  middle: '#45abe5',
+  high: '#e8aa25',
+} as const
+
 export const LESSON_COLORS = [
   DEFAULT_LESSON_COLORS.elementary,
   DEFAULT_LESSON_COLORS.middle,
@@ -198,6 +204,9 @@ export function validateLesson(
   }
   if (draft.color !== undefined && !/^#[0-9a-f]{6}$/i.test(draft.color)) {
     errors.push('수업 색상을 다시 선택해 주세요.')
+  }
+  if (draft.colorMode !== undefined && draft.colorMode !== 'auto' && draft.colorMode !== 'custom') {
+    errors.push('수업 색상 설정을 다시 선택해 주세요.')
   }
 
   if (errors.length === 0) {
@@ -347,7 +356,7 @@ export function getStudentGradeGroup(student: Pick<Student, 'school' | 'grade'>)
   return `${number}학년`
 }
 
-export function getDefaultLessonColor(studentIds: string[], students: Student[]): string {
+export function getDefaultLessonColor(studentIds: string[], students: Student[], lessonLabel = ''): string {
   const highestLevel = studentIds.reduce((highest, studentId) => {
     const student = students.find((item) => item.id === studentId)
     if (!student) return highest
@@ -355,13 +364,19 @@ export function getDefaultLessonColor(studentIds: string[], students: Student[])
     const level = gradeGroup.startsWith('고') ? 3 : gradeGroup.startsWith('중') ? 2 : 1
     return Math.max(highest, level)
   }, 1)
-  if (highestLevel === 3) return DEFAULT_LESSON_COLORS.high
-  if (highestLevel === 2) return DEFAULT_LESSON_COLORS.middle
-  return DEFAULT_LESSON_COLORS.elementary
+  const colors = lessonLabel.includes('국어') ? DEFAULT_KOREAN_LESSON_COLORS : DEFAULT_LESSON_COLORS
+  if (highestLevel === 3) return colors.high
+  if (highestLevel === 2) return colors.middle
+  return colors.elementary
 }
 
-export function getLessonColor(lesson: Pick<Lesson, 'color' | 'participants'>, students: Student[]): string {
-  return lesson.color ?? getDefaultLessonColor(lesson.participants.map((participant) => participant.studentId), students)
+export function getLessonColor(lesson: Pick<Lesson, 'color' | 'colorMode' | 'label' | 'participants'>, students: Student[]): string {
+  if (lesson.color && lesson.colorMode !== 'auto') return lesson.color
+  return getDefaultLessonColor(
+    lesson.participants.map((participant) => participant.studentId),
+    students,
+    lesson.label,
+  )
 }
 
 export function gradeGroupSortValue(label: string): number {
@@ -408,6 +423,7 @@ export function validateState(value: unknown): value is AppState {
     if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
     if (lesson.groupSeriesId !== undefined && typeof lesson.groupSeriesId !== 'string') return false
     if (lesson.color !== undefined && (typeof lesson.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(lesson.color))) return false
+    if (lesson.colorMode !== undefined && lesson.colorMode !== 'auto' && lesson.colorMode !== 'custom') return false
     if (lesson.teacherId !== undefined && !['teacher-1', 'teacher-2', 'teacher-3'].includes(lesson.teacherId)) return false
     if (!Array.isArray(lesson.participants)) return false
     if (lesson.kind === 'individual' && lesson.participants.length !== 1) return false

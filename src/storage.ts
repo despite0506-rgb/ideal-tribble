@@ -26,6 +26,9 @@ export const normalizeState = (state: AppState): AppState => ({
   })),
   lessons: state.lessons.map((lesson) => ({
     ...lesson,
+    colorMode: lesson.colorMode === 'auto' || lesson.colorMode === 'custom'
+      ? lesson.colorMode
+      : lesson.color ? 'custom' : 'auto',
     teacherId: (['teacher-1', 'teacher-2', 'teacher-3'] as TeacherId[]).includes(lesson.teacherId)
       ? lesson.teacherId
       : 'teacher-1',

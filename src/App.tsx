@@ -1333,7 +1333,7 @@ function LessonModal({
     [initialWeekday]: { start: initialStart, end: initialEnd },
   })
   const [label, setLabel] = useState(lesson?.label ?? '수학 · 정규')
-  const [color, setColor] = useState(lesson?.color ?? '')
+  const [color, setColor] = useState(lesson?.colorMode === 'auto' ? '' : lesson?.color ?? '')
   const [note, setNote] = useState(lesson?.note ?? '')
   const [participantIds, setParticipantIds] = useState<string[]>(initialParticipantIds)
   const [rides, setRides] = useState<Record<string, Transport>>(initialRides)
@@ -1412,6 +1412,7 @@ function LessonModal({
       teacherId: lesson?.teacherId ?? teacherId,
       label: label.trim(),
       color: color || undefined,
+      colorMode: color ? 'custom' : 'auto',
       note: note.trim(),
     }
     const participantsForWeekday = (weekday: Weekday) => {
@@ -1506,7 +1507,7 @@ function LessonModal({
               <button
                 type="button"
                 className={`lesson-color-auto${color === '' ? ' selected' : ''}`}
-                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students) } as CSSProperties}
+                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students, label) } as CSSProperties}
                 onClick={() => setColor('')}
                 aria-pressed={color === ''}
               >
@@ -1526,14 +1527,14 @@ function LessonModal({
               <label className={`lesson-custom-color${color && !LESSON_COLORS.includes(color as typeof LESSON_COLORS[number]) ? ' selected' : ''}`}>
                 <input
                   type="color"
-                  value={color || getDefaultLessonColor(participantIds, students)}
+                  value={color || getDefaultLessonColor(participantIds, students, label)}
                   onChange={(event) => setColor(event.target.value)}
                   aria-label="직접 수업 색상 선택"
                 />
                 직접 선택
               </label>
             </div>
-            <p><span className="elementary" />초등 분홍 <span className="middle" />중등 하늘 <span className="high" />고등 노랑</p>
+            <p><span className="elementary" />초등 분홍 <span className="middle" />중등 하늘 <span className="high" />고등 노랑 · 국어는 같은 계열에서 더 선명하게</p>
           </fieldset>
           <fieldset className="weekday-picker">
             <legend>

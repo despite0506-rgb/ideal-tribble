@@ -20,6 +20,7 @@ import {
   timeToMinutes,
   validateLesson,
   validateState,
+  DEFAULT_KOREAN_LESSON_COLORS,
   DEFAULT_LESSON_COLORS,
 } from './domain'
 import type { AppState, AttendanceRecord, Lesson, LessonDraft, Student } from './types'
@@ -107,10 +108,19 @@ describe('수업 색상', () => {
     expect(getDefaultLessonColor(['c'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.high)
   })
 
+  it('수업명에 국어가 들어가면 같은 계열의 더 선명한 색을 적용한다', () => {
+    expect(getDefaultLessonColor(['a'], levelStudents, '국어 · 독해')).toBe(DEFAULT_KOREAN_LESSON_COLORS.elementary)
+    expect(getDefaultLessonColor(['b'], levelStudents, '중등 국어')).toBe(DEFAULT_KOREAN_LESSON_COLORS.middle)
+    expect(getDefaultLessonColor(['c'], levelStudents, '고등 국어')).toBe(DEFAULT_KOREAN_LESSON_COLORS.high)
+  })
+
   it('학교급이 섞인 그룹은 높은 학교급을 우선하고 직접 지정한 색은 유지한다', () => {
     expect(getDefaultLessonColor(['a', 'b'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.middle)
     expect(getDefaultLessonColor(['a', 'c'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.high)
     expect(getLessonColor({ ...lesson('custom', ['a'], 600, 660), color: '#123456' }, levelStudents)).toBe('#123456')
+    expect(getLessonColor({
+      ...lesson('auto', ['a'], 600, 660), label: '국어', color: '#123456', colorMode: 'auto',
+    }, levelStudents)).toBe(DEFAULT_KOREAN_LESSON_COLORS.elementary)
   })
 })
 

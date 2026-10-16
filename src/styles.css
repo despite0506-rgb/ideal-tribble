@@ -1431,7 +1431,7 @@ body.sidebar-resizing {
   border-left: 3px solid var(--lesson-color, var(--brand));
   border-radius: 7px;
   color: var(--text);
-  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 12%, white);
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 34%, white);
   box-shadow: 0 1px 3px rgba(18, 38, 32, 0.08);
   cursor: pointer;
   text-align: left;
@@ -1443,8 +1443,8 @@ body.sidebar-resizing {
   border-right: 3px solid var(--lesson-color-2, var(--purple));
   border-left: 3px solid var(--lesson-color, var(--purple));
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 17%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 13%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 38%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 30%, white));
 }
 
 .lesson-card:hover,
@@ -1661,7 +1661,7 @@ body.sidebar-resizing {
   border: 1px solid #d5e7e2;
   border-left: 4px solid var(--lesson-color, var(--brand));
   border-radius: 9px;
-  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 7%, white);
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 28%, white);
   cursor: pointer;
   text-align: left;
 }
@@ -1671,8 +1671,8 @@ body.sidebar-resizing {
   border-right: 4px solid var(--lesson-color-2, var(--purple));
   border-left-color: var(--lesson-color, var(--purple));
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 12%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 9%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 32%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 25%, white));
 }
 
 .combined-day-label {
