@@ -1051,7 +1051,7 @@ function LessonModal({
   onDelete: (lessonId: string) => void
 }) {
   const initialParticipantIds = lesson?.participants.map((participant) => participant.studentId)
-    ?? [presetStudentId ?? students[0]?.id ?? ''].filter(Boolean)
+    ?? (presetStudentId ? [presetStudentId] : [])
   const initialRides = Object.fromEntries(
     (lesson?.participants ?? []).map((participant) => [participant.studentId, participant.transport]),
   ) as Record<string, Transport>
