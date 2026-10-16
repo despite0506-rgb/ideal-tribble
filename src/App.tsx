@@ -8,7 +8,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Clock3,
   Cloud,
   CloudOff,
   Copy,
@@ -56,6 +55,7 @@ import {
   groupLessonsBySeries,
   layoutLessons,
   lessonsForStudent,
+  matchesKoreanSearch,
   minutesToTime,
   timeToMinutes,
   validateLesson,
@@ -117,13 +117,6 @@ function gradeOptionsForSchool(school: string): string[] {
 
 function createBulkStudentRow(): BulkStudentRow {
   return { id: createId('student-row'), name: '', school: '청운초', grade: '1학년' }
-}
-
-function timeOptionsFor(value: string): number[] {
-  const minute = timeToMinutes(value)
-  return Number.isFinite(minute) && !TEN_MINUTE_OPTIONS.includes(minute)
-    ? [...TEN_MINUTE_OPTIONS, minute].sort((a, b) => a - b)
-    : TEN_MINUTE_OPTIONS
 }
 
 function initials(name: string): string {
@@ -897,6 +890,128 @@ function SchoolColorModal({
   )
 }
 
+function LessonStudentPicker({
+  students,
+  selectedIds,
+  multiple,
+  onChange,
+}: {
+  students: Student[]
+  selectedIds: string[]
+  multiple: boolean
+  onChange: (studentIds: string[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [gradeFilter, setGradeFilter] = useState('all')
+  const grades = [...new Set(students.map((student) => getStudentGradeGroup(student)))]
+    .sort((first, second) => gradeGroupSortValue(first) - gradeGroupSortValue(second) || first.localeCompare(second, 'ko'))
+  const filteredStudents = students.filter((student) => (
+    (gradeFilter === 'all' || getStudentGradeGroup(student) === gradeFilter)
+    && matchesKoreanSearch(student.name, query)
+  ))
+  const selectedStudents = selectedIds
+    .map((studentId) => studentById(students, studentId))
+    .filter((student): student is Student => Boolean(student))
+
+  const selectStudent = (studentId: string) => {
+    if (!multiple) {
+      onChange([studentId])
+      return
+    }
+    onChange(selectedIds.includes(studentId)
+      ? selectedIds.filter((id) => id !== studentId)
+      : [...selectedIds, studentId])
+  }
+
+  return (
+    <fieldset className="lesson-student-picker">
+      <legend>
+        {multiple ? '참여 학생' : '학생'} <em>{multiple ? '2명 이상 · 인원 제한 없음' : '필수'}</em>
+        <strong>{multiple ? `${selectedIds.length}명 선택` : (selectedStudents[0]?.name ?? '선택 전')}</strong>
+      </legend>
+      <div className="lesson-student-tools">
+        <label className="student-name-search">
+          <Search size={15} aria-hidden="true" />
+          <span className="sr-only">학생 이름 또는 초성 검색</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="이름 또는 초성 검색 (예: 김, ㄱㅁ)"
+          />
+          {query && <button type="button" onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={14} /></button>}
+        </label>
+        <label>
+          <span className="sr-only">학년 필터</span>
+          <select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+            <option value="all">전체 학년</option>
+            {grades.map((grade) => <option value={grade} key={grade}>{grade}</option>)}
+          </select>
+        </label>
+      </div>
+      {selectedStudents.length > 0 && (
+        <div className="selected-student-chips" aria-label="선택한 학생">
+          {selectedStudents.map((student) => multiple ? (
+            <button type="button" key={student.id} onClick={() => selectStudent(student.id)} className="selected-student-chip">
+              <span style={{ '--student-color': student.color } as CSSProperties} />
+              {student.name}
+              <X size={11} aria-hidden="true" />
+            </button>
+          ) : (
+            <span className="selected-student-chip fixed" key={student.id}>
+              <span style={{ '--student-color': student.color } as CSSProperties} />
+              {student.name}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="lesson-student-results" aria-label={`검색 결과 ${filteredStudents.length}명`}>
+        {filteredStudents.map((student) => {
+          const selected = selectedIds.includes(student.id)
+          return (
+            <button
+              type="button"
+              className={selected ? 'selected' : ''}
+              key={student.id}
+              onClick={() => selectStudent(student.id)}
+              aria-pressed={selected}
+            >
+              <Avatar student={student} size="sm" />
+              <span><strong>{student.name}</strong><small>{student.school || '학교 미등록'} · {getStudentGradeGroup(student)}</small></span>
+              <Check size={15} aria-hidden="true" />
+            </button>
+          )
+        })}
+        {filteredStudents.length === 0 && (
+          <p>검색 조건에 맞는 학생이 없습니다.</p>
+        )}
+      </div>
+    </fieldset>
+  )
+}
+
+function LessonTimeInput({
+  value,
+  label,
+  onChange,
+}: {
+  value: string
+  label: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="lesson-time-input">
+      <span className="sr-only">{label}</span>
+      <input
+        type="time"
+        step={600}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+      />
+    </label>
+  )
+}
+
 function LessonModal({
   lesson,
   students,
@@ -930,8 +1045,8 @@ function LessonModal({
   const initialEnd = minutesToTime(lesson?.endMinute ?? 15 * 60 + 50)
   const [kind, setKind] = useState<Lesson['kind']>(lesson?.kind ?? presetKind ?? 'individual')
   const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([initialWeekday])
-  const [start, setStart] = useState(initialStart)
-  const [end, setEnd] = useState(initialEnd)
+  const start = initialStart
+  const end = initialEnd
   const [weekdayTimes, setWeekdayTimes] = useState<Partial<Record<Weekday, LessonTimeValue>>>({
     [initialWeekday]: { start: initialStart, end: initialEnd },
   })
@@ -965,27 +1080,23 @@ function LessonModal({
     setRides((current) => ({ ...current, [studentId]: { ...rideFor(studentId), ...patch } }))
   }
 
-  const duration = timeToMinutes(end) - timeToMinutes(start)
   const changeKind = (nextKind: Lesson['kind']) => {
     setKind(nextKind)
     if (nextKind === 'individual') setParticipantIds((current) => current.slice(0, 1))
-  }
-  const toggleParticipant = (studentId: string) => {
-    setParticipantIds((current) => current.includes(studentId)
-      ? current.filter((id) => id !== studentId)
-      : [...current, studentId])
   }
   const toggleWeekday = (weekday: Weekday) => {
     setErrors([])
     if (lesson) {
       setSelectedWeekdays([weekday])
+      setWeekdayTimes((times) => ({ ...times, [weekday]: times[weekday] ?? { start, end } }))
       return
     }
-    setSelectedWeekdays((current) => {
-      if (current.includes(weekday)) return current.filter((day) => day !== weekday)
-      setWeekdayTimes((times) => ({ ...times, [weekday]: times[weekday] ?? { start, end } }))
-      return [...current, weekday].sort((first, second) => first - second)
-    })
+    if (selectedWeekdays.includes(weekday)) {
+      setSelectedWeekdays((current) => current.filter((day) => day !== weekday))
+      return
+    }
+    setWeekdayTimes((times) => ({ ...times, [weekday]: times[weekday] ?? { start, end } }))
+    setSelectedWeekdays((current) => [...current, weekday].sort((first, second) => first - second))
   }
   const updateWeekdayTime = (weekday: Weekday, patch: Partial<LessonTimeValue>) => {
     setWeekdayTimes((current) => ({
@@ -1026,7 +1137,7 @@ function LessonModal({
       ? ['요일을 한 개 이상 선택해 주세요.']
       : [...new Set(selectedWeekdays.flatMap((weekday) => {
         const dayName = WEEKDAYS.find((day) => day.value === weekday)?.long ?? ''
-        const time = kind === 'group' ? (weekdayTimes[weekday] ?? { start, end }) : { start, end }
+        const time = weekdayTimes[weekday] ?? { start, end }
         return validateLesson({
           ...sharedDraft,
           weekday,
@@ -1043,7 +1154,7 @@ function LessonModal({
     }
     const createdAt = lesson?.createdAt ?? new Date().toISOString()
     onSave(selectedWeekdays.map((weekday) => {
-      const time = kind === 'group' ? (weekdayTimes[weekday] ?? { start, end }) : { start, end }
+      const time = weekdayTimes[weekday] ?? { start, end }
       return {
         ...sharedDraft,
         weekday,
@@ -1077,29 +1188,12 @@ function LessonModal({
               </button>
             </div>
           </fieldset>
-          {kind === 'individual' ? (
-            <label className="field">
-              <span>학생 <em>필수</em></span>
-              <select value={participantIds[0] ?? ''} onChange={(event) => setParticipantIds(event.target.value ? [event.target.value] : [])}>
-                <option value="">학생 선택</option>
-                {students.map((student) => <option value={student.id} key={student.id}>{student.name} · {student.grade}</option>)}
-              </select>
-            </label>
-          ) : (
-            <fieldset className="group-student-picker">
-              <legend>참여 학생 <em>2명 이상 · 인원 제한 없음</em><strong>{participantIds.length}명 선택</strong></legend>
-              <div className="group-student-options">
-                {students.map((student) => (
-                  <label className={participantIds.includes(student.id) ? 'selected' : ''} key={student.id}>
-                    <input type="checkbox" checked={participantIds.includes(student.id)} onChange={() => toggleParticipant(student.id)} />
-                    <Avatar student={student} size="sm" />
-                    <span><strong>{student.name}</strong><small>{student.grade || '학년 미등록'}</small></span>
-                    <Check size={15} aria-hidden="true" />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )}
+          <LessonStudentPicker
+            students={students}
+            selectedIds={participantIds}
+            multiple={kind === 'group'}
+            onChange={setParticipantIds}
+          />
           <label className="field">
             <span>수업 이름 <em>필수</em></span>
             <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 수학 · 심화" />
@@ -1123,59 +1217,26 @@ function LessonModal({
               ))}
             </div>
           </fieldset>
-          {kind === 'group' ? (
-            <fieldset className="group-weekday-times">
-              <legend>요일별 수업 시간 <em>각 요일을 다르게 설정할 수 있어요</em></legend>
-              <div className="group-weekday-time-list">
-                {selectedWeekdays.map((weekday) => {
-                  const day = WEEKDAYS.find((item) => item.value === weekday)
-                  const time = weekdayTimes[weekday] ?? { start, end }
-                  const dayDuration = timeToMinutes(time.end) - timeToMinutes(time.start)
-                  return (
-                    <div className="group-weekday-time-row" key={weekday}>
-                      <strong>{day?.short}</strong>
-                      <label>
-                        <span className="sr-only">{day?.long} 시작 시간</span>
-                        <select value={time.start} onChange={(event) => updateWeekdayTime(weekday, { start: event.target.value })}>
-                          {timeOptionsFor(time.start).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
-                        </select>
-                      </label>
-                      <span aria-hidden="true">→</span>
-                      <label>
-                        <span className="sr-only">{day?.long} 종료 시간</span>
-                        <select value={time.end} onChange={(event) => updateWeekdayTime(weekday, { end: event.target.value })}>
-                          {timeOptionsFor(time.end).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
-                        </select>
-                      </label>
-                      <small>{Number.isFinite(dayDuration) && dayDuration > 0 ? formatDuration(dayDuration) : '시간 확인'}</small>
-                    </div>
-                  )
-                })}
-                {selectedWeekdays.length === 0 && <p>요일을 선택하면 시간 설정이 나타납니다.</p>}
-              </div>
-            </fieldset>
-          ) : (
-            <>
-              <div className="time-fields">
-                <label className="field">
-                  <span>시작 시간 <small>10분 단위</small></span>
-                  <select value={start} onChange={(event) => setStart(event.target.value)}>
-                    {timeOptionsFor(start).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
-                  </select>
-                </label>
-                <span className="time-divider" aria-hidden="true">→</span>
-                <label className="field">
-                  <span>종료 시간 <small>10분 단위</small></span>
-                  <select value={end} onChange={(event) => setEnd(event.target.value)}>
-                    {timeOptionsFor(end).map((minute) => <option value={minutesToTime(minute)} key={minute}>{minutesToTime(minute)}</option>)}
-                  </select>
-                </label>
-              </div>
-              {Number.isFinite(duration) && duration > 0 && (
-                <div className="duration-note"><Clock3 size={14} /> 총 {formatDuration(duration)} 수업</div>
-              )}
-            </>
-          )}
+          <fieldset className="group-weekday-times">
+            <legend>요일별 수업 시간 <em>직접 입력하거나 시·분을 선택하세요 · 10분 단위</em></legend>
+            <div className="group-weekday-time-list">
+              {selectedWeekdays.map((weekday) => {
+                const day = WEEKDAYS.find((item) => item.value === weekday)
+                const time = weekdayTimes[weekday] ?? { start, end }
+                const dayDuration = timeToMinutes(time.end) - timeToMinutes(time.start)
+                return (
+                  <div className="group-weekday-time-row" key={weekday}>
+                    <strong>{day?.short}</strong>
+                    <LessonTimeInput value={time.start} label={`${day?.long} 시작 시간`} onChange={(value) => updateWeekdayTime(weekday, { start: value })} />
+                    <span aria-hidden="true">→</span>
+                    <LessonTimeInput value={time.end} label={`${day?.long} 종료 시간`} onChange={(value) => updateWeekdayTime(weekday, { end: value })} />
+                    <small>{Number.isFinite(dayDuration) && dayDuration > 0 ? formatDuration(dayDuration) : '시간 확인'}</small>
+                  </div>
+                )
+              })}
+              {selectedWeekdays.length === 0 && <p>요일을 선택하면 시간 설정이 나타납니다.</p>}
+            </div>
+          </fieldset>
           {participantIds.length > 0 && (
             <fieldset className="participant-rides">
               <legend><Bus size={16} /> 학생별 차량 이용</legend>
@@ -1278,13 +1339,6 @@ function GroupMembersModal({
   const [errors, setErrors] = useState<string[]>([])
   const representative = series.lessons[0]
 
-  const toggleParticipant = (studentId: string) => {
-    setErrors([])
-    setParticipantIds((current) => current.includes(studentId)
-      ? current.filter((id) => id !== studentId)
-      : [...current, studentId])
-  }
-
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (participantIds.length < 2) {
@@ -1329,19 +1383,12 @@ function GroupMembersModal({
               ))}
             </div>
           </div>
-          <fieldset className="group-student-picker group-member-editor">
-            <legend>참여 학생 <em>2명 이상 · 전체 일정에 적용</em><strong>{participantIds.length}명 선택</strong></legend>
-            <div className="group-student-options">
-              {students.map((student) => (
-                <label className={participantIds.includes(student.id) ? 'selected' : ''} key={student.id}>
-                  <input type="checkbox" checked={participantIds.includes(student.id)} onChange={() => toggleParticipant(student.id)} />
-                  <Avatar student={student} size="sm" />
-                  <span><strong>{student.name}</strong><small>{student.grade || '학년 미등록'}</small></span>
-                  <Check size={15} aria-hidden="true" />
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <LessonStudentPicker
+            students={students}
+            selectedIds={participantIds}
+            multiple
+            onChange={(studentIds) => { setErrors([]); setParticipantIds(studentIds) }}
+          />
           <p className="group-member-help">새로 추가한 학생의 차량 설정은 학생 정보에 저장된 기본값으로 적용됩니다. 각 요일의 차량 설정은 해당 수업을 열어 변경할 수 있어요.</p>
         </div>
         <footer className="modal-footer">

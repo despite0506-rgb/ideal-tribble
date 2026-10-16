@@ -249,6 +249,24 @@ export function gradeGroupSortValue(label: string): number {
   return base + Number(match[2])
 }
 
+const KOREAN_INITIALS = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+
+export function getKoreanInitials(value: string): string {
+  return [...value.normalize('NFC')].map((character) => {
+    const code = character.charCodeAt(0) - 0xac00
+    if (code < 0 || code > 11171) return character
+    return KOREAN_INITIALS[Math.floor(code / 588)] ?? character
+  }).join('')
+}
+
+export function matchesKoreanSearch(value: string, query: string): boolean {
+  const normalizedValue = value.toLocaleLowerCase('ko').replace(/\s+/g, '')
+  const normalizedQuery = query.toLocaleLowerCase('ko').replace(/\s+/g, '')
+  if (!normalizedQuery) return true
+  if (normalizedValue.includes(normalizedQuery)) return true
+  return /^[ㄱ-ㅎ]+$/.test(normalizedQuery) && getKoreanInitials(normalizedValue).includes(normalizedQuery)
+}
+
 export function validateState(value: unknown): value is AppState {
   if (!value || typeof value !== 'object') return false
   const state = value as Partial<AppState>

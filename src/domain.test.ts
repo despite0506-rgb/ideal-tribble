@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   intervalsOverlap,
   getScheduleColumns,
+  getKoreanInitials,
   getStudentGradeGroup,
   gradeGroupSortValue,
   groupLessonsBySeries,
   layoutLessons,
   lessonsForStudent,
   minutesToTime,
+  matchesKoreanSearch,
   timeToMinutes,
   validateLesson,
   validateState,
@@ -85,6 +87,18 @@ describe('학생 학년 그룹', () => {
 
   it('초등, 중등, 고등 순서로 정렬 값을 만든다', () => {
     expect(['고1', '초6', '중1'].sort((a, b) => gradeGroupSortValue(a) - gradeGroupSortValue(b))).toEqual(['초6', '중1', '고1'])
+  })
+})
+
+describe('학생 이름 검색', () => {
+  it('한글 이름의 초성을 만든다', () => {
+    expect(getKoreanInitials('김민준')).toBe('ㄱㅁㅈ')
+  })
+
+  it('이름 일부와 초성으로 검색한다', () => {
+    expect(matchesKoreanSearch('김민준', '김')).toBe(true)
+    expect(matchesKoreanSearch('김민준', 'ㅁㅈ')).toBe(true)
+    expect(matchesKoreanSearch('박도윤', 'ㄱ')).toBe(false)
   })
 })
 
