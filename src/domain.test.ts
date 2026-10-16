@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   attendanceRecordId,
+  attendanceSessionId,
   buildMonthlyAttendanceSummaries,
   dateForWeekdayInCurrentWeek,
   intervalsOverlap,
@@ -125,6 +126,10 @@ describe('수업 색상', () => {
 })
 
 describe('출석 날짜와 월별 집계', () => {
+  it('수업과 날짜로 실제 수업 회차 id를 만든다', () => {
+    expect(attendanceSessionId('lesson-1', '2026-10-16')).toBe('attendance-session:lesson-1:2026-10-16')
+  })
+
   it('현재 주에서 수업 요일에 맞는 날짜를 찾는다', () => {
     expect(dateForWeekdayInCurrentWeek(1, new Date(2026, 9, 16))).toBe('2026-10-12')
     expect(dateForWeekdayInCurrentWeek(5, new Date(2026, 9, 16))).toBe('2026-10-16')
@@ -322,6 +327,7 @@ describe('저장 데이터 검증', () => {
     students,
     lessons: [lesson('one', ['a'], 600, 660), lesson('group', ['b', 'c'], 700, 760)],
     attendanceRecords: [],
+    attendanceSessions: [],
   }
 
   it('정상 상태를 허용한다', () => {
@@ -348,5 +354,17 @@ describe('저장 데이터 검증', () => {
   it('올바른 수업 색상만 허용한다', () => {
     expect(validateState({ ...validState, lessons: [{ ...lesson('color', ['a'], 600, 660), color: '#72b9e6' }] })).toBe(true)
     expect(validateState({ ...validState, lessons: [{ ...lesson('bad-color', ['a'], 600, 660), color: 'skyblue' }] })).toBe(false)
+  })
+
+  it('실제 종료 시간이 담긴 출석 회차를 검증한다', () => {
+    const attendanceSessions = [{
+      id: attendanceSessionId('one', '2026-10-16'),
+      lessonId: 'one',
+      date: '2026-10-16',
+      actualEndMinute: 675,
+      updatedAt: '2026-10-16T10:00:00.000Z',
+    }]
+    expect(validateState({ ...validState, attendanceSessions })).toBe(true)
+    expect(validateState({ ...validState, attendanceSessions: [{ ...attendanceSessions[0], actualEndMinute: 1440 }] })).toBe(false)
   })
 })

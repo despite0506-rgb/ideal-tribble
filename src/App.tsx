@@ -53,6 +53,7 @@ import {
   WEEKDAYS,
   createId,
   attendanceRecordId,
+  attendanceSessionId,
   buildMonthlyAttendanceSummaries,
   dateForWeekdayInCurrentWeek,
   dateToInputValue,
@@ -73,7 +74,7 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
 type View = 'schedule' | 'groups' | 'attendance' | 'students' | 'student'
@@ -118,7 +119,7 @@ const ATTENDANCE_STATUSES: { value: AttendanceStatus; label: string; short: stri
   { value: 'present', label: '출석', short: '출' },
   { value: 'late', label: '지각', short: '지' },
   { value: 'absent', label: '결석', short: '결' },
-  { value: 'excused', label: '인정', short: '인' },
+  { value: 'excused', label: '병결', short: '병' },
 ]
 
 type BulkStudentRow = {
@@ -161,6 +162,17 @@ function koreanMonthLabel(value: string): string {
   const [year, month] = value.split('-').map(Number)
   if (!year || !month) return value
   return `${year}년 ${month}월`
+}
+
+function koreanTimeLabel(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  }).format(date)
 }
 
 function initials(name: string): string {
@@ -237,11 +249,15 @@ function LessonCardContent({
   lesson,
   students,
   transportEnabled,
+  showStudentAvatars,
+  showStudentNames,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
   transportEnabled: boolean
+  showStudentAvatars: boolean
+  showStudentNames: boolean
   dense?: boolean
 }) {
   const participants = lesson.participants
@@ -256,21 +272,25 @@ function LessonCardContent({
         </span>
         <span className="lesson-card-badges">
           {transportEnabled && <LessonRideSummary lesson={lesson} />}
-          {lesson.kind === 'group' && <span className="kind-badge">{lesson.participants.length}인</span>}
+          {lesson.kind === 'group' && <span className="kind-badge" aria-label={`${lesson.participants.length}명`}>{lesson.participants.length}</span>}
         </span>
       </div>
       <strong className="lesson-title">{lesson.label || '수업'}</strong>
-      <div className="lesson-people">
-        <span className="mini-avatars" aria-hidden="true">
-          {participants.map(({ student }) => <Avatar key={student.id} student={student} size="sm" />)}
-        </span>
-        <span>{participants.map(({ student }) => student.name).join(' · ')}</span>
-      </div>
+      {(showStudentAvatars || showStudentNames) && (
+        <div className="lesson-people">
+          {showStudentAvatars && (
+            <span className="mini-avatars" aria-hidden="true">
+              {participants.map(({ student }) => <Avatar key={student.id} student={student} size="sm" />)}
+            </span>
+          )}
+          {showStudentNames && <span>{participants.map(({ student }) => student.name).join(' · ')}</span>}
+        </div>
+      )}
       {transportEnabled && (
         <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
           {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
             <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
-              {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
+              {participants.length > 1 && showStudentNames && <span className="ride-name">{student.name.slice(-2)}</span>}
               <RidePills transport={participant.transport} compact />
             </span>
           ))}
@@ -380,7 +400,14 @@ function Timeline({
                       key={lesson.id}
                       aria-label={lessonAriaLabel(lesson, students, settings.transportEnabled)}
                     >
-                      <LessonCardContent lesson={lesson} students={students} transportEnabled={settings.transportEnabled} dense={(lesson.endMinute - lesson.startMinute) < 45} />
+                      <LessonCardContent
+                        lesson={lesson}
+                        students={students}
+                        transportEnabled={settings.transportEnabled}
+                        showStudentAvatars={settings.showStudentAvatars}
+                        showStudentNames={settings.showStudentNames}
+                        dense={(lesson.endMinute - lesson.startMinute) < 45}
+                      />
                     </button>
                   )
                 })}
@@ -401,6 +428,8 @@ function LessonList({
   selectedDay,
   onSelectDay,
   transportEnabled,
+  showStudentAvatars,
+  showStudentNames,
   mobileOnly = false,
 }: {
   lessons: Lesson[]
@@ -410,6 +439,8 @@ function LessonList({
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   transportEnabled: boolean
+  showStudentAvatars: boolean
+  showStudentNames: boolean
   mobileOnly?: boolean
 }) {
   const columns = getScheduleColumns(weekendMode)
@@ -468,7 +499,13 @@ function LessonList({
                     aria-label={lessonAriaLabel(lesson, students, transportEnabled)}
                   >
                     {column.weekdays.length > 1 && <span className="combined-day-label">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.long}</span>}
-                    <LessonCardContent lesson={lesson} students={students} transportEnabled={transportEnabled} />
+                    <LessonCardContent
+                      lesson={lesson}
+                      students={students}
+                      transportEnabled={transportEnabled}
+                      showStudentAvatars={showStudentAvatars}
+                      showStudentNames={showStudentNames}
+                    />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
                   </button>
                   )
@@ -1142,12 +1179,14 @@ function LessonTimeInput({
 type AttendanceDraft = {
   status?: AttendanceStatus
   note: string
+  checkedAt?: string
 }
 
 function AttendanceModal({
   lesson,
   students,
   records,
+  sessions,
   teacherName,
   onClose,
   onOpenSettings,
@@ -1156,12 +1195,19 @@ function AttendanceModal({
   lesson: Lesson
   students: Student[]
   records: AttendanceRecord[]
+  sessions: AttendanceSession[]
   teacherName: string
   onClose: () => void
   onOpenSettings: () => void
-  onSave: (date: string, records: AttendanceRecord[]) => void
+  onSave: (date: string, records: AttendanceRecord[], session: AttendanceSession) => void
 }) {
-  const [date, setDate] = useState(() => dateForWeekdayInCurrentWeek(lesson.weekday))
+  const initialDate = dateForWeekdayInCurrentWeek(lesson.weekday)
+  const [date, setDate] = useState(() => initialDate)
+  const [actualEndTime, setActualEndTime] = useState(() => {
+    const session = sessions.find((item) => item.lessonId === lesson.id && item.date === initialDate)
+    return minutesToTime(session?.actualEndMinute ?? Math.min(lesson.endMinute, 1439))
+  })
+  const [timeError, setTimeError] = useState('')
   const recordsForDate = records.filter((record) => record.lessonId === lesson.id && record.date === date)
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>(() => Object.fromEntries(
     lesson.participants.map((participant) => {
@@ -1169,7 +1215,7 @@ function AttendanceModal({
         item.lessonId === lesson.id && item.studentId === participant.studentId
         && item.date === dateForWeekdayInCurrentWeek(lesson.weekday)
       ))
-      return [participant.studentId, { status: record?.status, note: record?.note ?? '' }]
+      return [participant.studentId, { status: record?.status, note: record?.note ?? '', checkedAt: record?.checkedAt ?? record?.updatedAt }]
     }),
   ))
 
@@ -1178,27 +1224,38 @@ function AttendanceModal({
       const record = records.find((item) => (
         item.lessonId === lesson.id && item.studentId === participant.studentId && item.date === date
       ))
-      return [participant.studentId, { status: record?.status, note: record?.note ?? '' }]
+      return [participant.studentId, { status: record?.status, note: record?.note ?? '', checkedAt: record?.checkedAt ?? record?.updatedAt }]
     })))
-  }, [date, lesson.id, lesson.participants, records])
+    const session = sessions.find((item) => item.lessonId === lesson.id && item.date === date)
+    setActualEndTime(minutesToTime(session?.actualEndMinute ?? Math.min(lesson.endMinute, 1439)))
+    setTimeError('')
+  }, [date, lesson.endMinute, lesson.id, lesson.participants, records, sessions])
 
   const setStatus = (studentId: string, status?: AttendanceStatus) => {
+    const checkedAt = status ? new Date().toISOString() : undefined
     setDrafts((current) => ({
       ...current,
-      [studentId]: { ...current[studentId], status, note: current[studentId]?.note ?? '' },
+      [studentId]: { ...current[studentId], status, note: current[studentId]?.note ?? '', checkedAt },
     }))
   }
   const setAllPresent = () => {
+    const checkedAt = new Date().toISOString()
     setDrafts((current) => Object.fromEntries(lesson.participants.map((participant) => [
       participant.studentId,
-      { status: 'present', note: current[participant.studentId]?.note ?? '' },
+      { status: 'present', note: current[participant.studentId]?.note ?? '', checkedAt },
     ])))
   }
   const checkedCount = lesson.participants.filter((participant) => drafts[participant.studentId]?.status).length
   const save = (event: FormEvent) => {
     event.preventDefault()
     const updatedAt = new Date().toISOString()
-    onSave(date, lesson.participants.flatMap((participant) => {
+    const actualEndMinute = timeToMinutes(actualEndTime)
+    if (!Number.isInteger(actualEndMinute) || actualEndMinute <= lesson.startMinute) {
+      setTimeError(`종료 시간은 시작 시간 ${minutesToTime(lesson.startMinute)}보다 늦게 입력해 주세요.`)
+      return
+    }
+    setTimeError('')
+    const savedRecords = lesson.participants.flatMap((participant) => {
       const draft = drafts[participant.studentId]
       if (!draft?.status) return []
       return [{
@@ -1210,9 +1267,17 @@ function AttendanceModal({
         date,
         status: draft.status,
         note: draft.note.trim(),
+        checkedAt: draft.checkedAt ?? updatedAt,
         updatedAt,
       }]
-    }))
+    })
+    onSave(date, savedRecords, {
+      id: attendanceSessionId(lesson.id, date),
+      lessonId: lesson.id,
+      date,
+      actualEndMinute,
+      updatedAt,
+    })
   }
 
   return (
@@ -1233,12 +1298,27 @@ function AttendanceModal({
               </label>
               <button type="button" onClick={() => setDate((current) => shiftDateValue(current, 7))} aria-label="다음 주"><ChevronRight size={16} /></button>
             </div>
+            <label className="attendance-end-time">
+              <span>실제 종료</span>
+              <input
+                type="time"
+                step={60}
+                min={minutesToTime(Math.min(lesson.startMinute + 1, 1439))}
+                value={actualEndTime}
+                onChange={(event) => {
+                  setActualEndTime(event.target.value)
+                  setTimeError('')
+                }}
+                required
+              />
+            </label>
           </section>
+          {timeError && <p className="form-error attendance-time-error">{timeError}</p>}
 
           <div className="attendance-check-toolbar">
             <span><strong>{checkedCount}</strong> / {lesson.participants.length}명 체크</span>
             <div>
-              <button type="button" onClick={() => setDrafts((current) => Object.fromEntries(Object.entries(current).map(([studentId, draft]) => [studentId, { ...draft, status: undefined }]))) }>전체 해제</button>
+              <button type="button" onClick={() => setDrafts((current) => Object.fromEntries(Object.entries(current).map(([studentId, draft]) => [studentId, { ...draft, status: undefined, checkedAt: undefined }]))) }>전체 해제</button>
               <button type="button" className="all-present" onClick={setAllPresent}><Check size={14} /> 모두 출석</button>
             </div>
           </div>
@@ -1267,14 +1347,17 @@ function AttendanceModal({
                       </button>
                     ))}
                   </div>
-                  <label className="attendance-note">
-                    <span className="sr-only">{student.name} 출석 메모</span>
-                    <input
-                      value={draft.note}
-                      onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, note: event.target.value } }))}
-                      placeholder="메모 (선택)"
-                    />
-                  </label>
+                  <div className="attendance-note-column">
+                    <label className="attendance-note">
+                      <span className="sr-only">{student.name} 출석 메모</span>
+                      <input
+                        value={draft.note}
+                        onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, note: event.target.value } }))}
+                        placeholder="메모 (선택)"
+                      />
+                    </label>
+                    {draft.checkedAt && <small className="attendance-stamp">체크 {koreanTimeLabel(draft.checkedAt)}</small>}
+                  </div>
                 </article>
               )
             })}
@@ -1854,7 +1937,7 @@ function AttendanceReportPage({
       ]
     })
     const csv = [
-      ['이름', '학교', '학년', '대상 수업', '출석', '지각', '결석', '인정', '미체크', '출석률'],
+      ['이름', '학교', '학년', '대상 수업', '출석', '지각', '결석', '병결', '미체크', '출석률'],
       ...rows,
     ].map((row) => row.map(escape).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' }))
@@ -1894,12 +1977,12 @@ function AttendanceReportPage({
       <section className="attendance-report-table-card">
         <header>
           <div><ClipboardCheck size={18} /><h2>전체 원생 월별 출석</h2></div>
-          <span>{filteredSummaries.length}명 · 인정결석은 출석률 계산에서 제외</span>
+          <span>{filteredSummaries.length}명 · 병결은 출석률 계산에서 제외</span>
         </header>
         <div className="attendance-table-scroll">
           <table className="attendance-report-table">
             <thead>
-              <tr><th>학생</th><th>수업</th><th>출석</th><th>지각</th><th>결석</th><th>인정</th><th>미체크</th><th>출석률</th></tr>
+              <tr><th>학생</th><th>수업</th><th>출석</th><th>지각</th><th>결석</th><th>병결</th><th>미체크</th><th>출석률</th></tr>
             </thead>
             <tbody>
               {filteredSummaries.map((summary) => {
@@ -2338,7 +2421,7 @@ export default function App() {
     setNotice('수업을 삭제했습니다.')
   }
 
-  const saveAttendance = (lesson: Lesson, date: string, savedRecords: AttendanceRecord[]) => {
+  const saveAttendance = (lesson: Lesson, date: string, savedRecords: AttendanceRecord[], session: AttendanceSession) => {
     const participantIds = new Set(lesson.participants.map((participant) => participant.studentId))
     setAppState((current) => ({
       ...current,
@@ -2347,6 +2430,10 @@ export default function App() {
           record.lessonId === lesson.id && record.date === date && participantIds.has(record.studentId)
         )),
         ...savedRecords,
+      ],
+      attendanceSessions: [
+        ...current.attendanceSessions.filter((item) => item.id !== session.id),
+        session,
       ],
     }))
     setAttendanceModalLessonId(null)
@@ -2840,6 +2927,18 @@ export default function App() {
                       }}
                     />
                   </div>
+                  <div className="lesson-content-settings" aria-label="수업 카드 표시 설정">
+                    <Toggle
+                      label="학생 아이콘"
+                      checked={scheduleSettings.showStudentAvatars}
+                      onChange={(showStudentAvatars) => setScheduleSettings((current) => ({ ...current, showStudentAvatars }))}
+                    />
+                    <Toggle
+                      label="학생 이름"
+                      checked={scheduleSettings.showStudentNames}
+                      onChange={(showStudentNames) => setScheduleSettings((current) => ({ ...current, showStudentNames }))}
+                    />
+                  </div>
                   {outsideDisplayCount > 0 && (
                     <p className="hidden-lessons-note">현재 설정에서 {outsideDisplayCount}개 수업이 시간표 밖에 있습니다. 목록 보기에서는 모두 확인할 수 있어요.</p>
                   )}
@@ -2858,10 +2957,10 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} />
                 </>
               )}
             </section>
@@ -2979,13 +3078,14 @@ export default function App() {
           lesson={activeAttendanceLesson}
           students={appState.students}
           records={appState.attendanceRecords}
+          sessions={appState.attendanceSessions}
           teacherName={scheduleSettings.teacherNames[TEACHERS.find((teacher) => teacher.id === activeAttendanceLesson.teacherId)?.index ?? 0]}
           onClose={() => setAttendanceModalLessonId(null)}
           onOpenSettings={() => {
             setAttendanceModalLessonId(null)
             setLessonModal({ open: true, lessonId: activeAttendanceLesson.id })
           }}
-          onSave={(date, records) => saveAttendance(activeAttendanceLesson, date, records)}
+          onSave={(date, records, session) => saveAttendance(activeAttendanceLesson, date, records, session)}
         />
       )}
       {studentModal.open && (

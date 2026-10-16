@@ -58,6 +58,15 @@ export type AttendanceRecord = {
   date: string
   status: AttendanceStatus
   note: string
+  checkedAt?: string
+  updatedAt: string
+}
+
+export type AttendanceSession = {
+  id: string
+  lessonId: string
+  date: string
+  actualEndMinute: number
   updatedAt: string
 }
 
@@ -66,6 +75,7 @@ export type AppState = {
   students: Student[]
   lessons: Lesson[]
   attendanceRecords: AttendanceRecord[]
+  attendanceSessions: AttendanceSession[]
 }
 
 export type WeekendMode = 'hidden' | 'combined' | 'separate'
@@ -78,6 +88,8 @@ export type ScheduleSettings = {
   endMinute: number
   weekendMode: WeekendMode
   transportEnabled: boolean
+  showStudentAvatars: boolean
+  showStudentNames: boolean
 }
 
 export type LessonDraft = Omit<Lesson, 'id' | 'createdAt'>

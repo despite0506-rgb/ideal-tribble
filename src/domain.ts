@@ -290,6 +290,10 @@ export function attendanceRecordId(lessonId: string, date: string, studentId: st
   return `attendance:${lessonId}:${date}:${studentId}`
 }
 
+export function attendanceSessionId(lessonId: string, date: string): string {
+  return `attendance-session:${lessonId}:${date}`
+}
+
 export function lessonOccurrenceDates(lesson: Pick<Lesson, 'weekday'>, month: string): string[] {
   if (!/^\d{4}-\d{2}$/.test(month)) return []
   const [yearText, monthText] = month.split('-')
@@ -446,7 +450,21 @@ export function validateState(value: unknown): value is AppState {
       if (typeof record.studentId !== 'string' || !studentIds.has(record.studentId)) return false
       if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date)) return false
       if (!['present', 'late', 'absent', 'excused'].includes(record.status)) return false
+      if (record.checkedAt !== undefined && typeof record.checkedAt !== 'string') return false
       if (typeof record.note !== 'string' || typeof record.updatedAt !== 'string') return false
+    }
+  }
+  if (state.attendanceSessions !== undefined) {
+    if (!Array.isArray(state.attendanceSessions)) return false
+    const sessionIds = new Set<string>()
+    for (const session of state.attendanceSessions) {
+      if (!session || typeof session !== 'object') return false
+      if (typeof session.id !== 'string' || sessionIds.has(session.id)) return false
+      sessionIds.add(session.id)
+      if (typeof session.lessonId !== 'string') return false
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(session.date)) return false
+      if (!Number.isInteger(session.actualEndMinute) || session.actualEndMinute < 0 || session.actualEndMinute >= 1440) return false
+      if (typeof session.updatedAt !== 'string') return false
     }
   }
   return true

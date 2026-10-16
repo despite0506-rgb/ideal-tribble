@@ -60,4 +60,5 @@ export const DEMO_STATE: AppState = {
     ]),
   ],
   attendanceRecords: [],
+  attendanceSessions: [],
 }

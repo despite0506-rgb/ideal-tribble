@@ -13,6 +13,8 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   endMinute: 22 * 60,
   weekendMode: 'hidden',
   transportEnabled: true,
+  showStudentAvatars: true,
+  showStudentNames: true,
 }
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
@@ -34,6 +36,7 @@ export const normalizeState = (state: AppState): AppState => ({
       : 'teacher-1',
   })),
   attendanceRecords: Array.isArray(state.attendanceRecords) ? state.attendanceRecords : [],
+  attendanceSessions: Array.isArray(state.attendanceSessions) ? state.attendanceSessions : [],
 })
 
 export function parseAppState(value: unknown): AppState | null {
@@ -102,6 +105,8 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     endMinute: Number(settings.endMinute),
     weekendMode: settings.weekendMode as ScheduleSettings['weekendMode'],
     transportEnabled: typeof settings.transportEnabled === 'boolean' ? settings.transportEnabled : true,
+    showStudentAvatars: typeof settings.showStudentAvatars === 'boolean' ? settings.showStudentAvatars : true,
+    showStudentNames: typeof settings.showStudentNames === 'boolean' ? settings.showStudentNames : true,
   }
 }
 

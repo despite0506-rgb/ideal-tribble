@@ -4,8 +4,8 @@ import { DEFAULT_SCHEDULE_SETTINGS, parseAppState, parseScheduleSettings } from 
 
 describe('저장 자료 호환성', () => {
   it('출석 기능 추가 전 자료에는 빈 출석 기록을 채운다', () => {
-    const { attendanceRecords: _attendanceRecords, ...legacyState } = structuredClone(DEMO_STATE)
-    expect(parseAppState(legacyState)?.attendanceRecords).toEqual([])
+    const { attendanceRecords: _attendanceRecords, attendanceSessions: _attendanceSessions, ...legacyState } = structuredClone(DEMO_STATE)
+    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [] })
   })
 
   it('기존 수업은 자동 색상으로, 직접 지정한 색은 사용자 색상으로 구분한다', () => {
@@ -25,5 +25,22 @@ describe('시간표 설정', () => {
 
   it('차량 기능 사용 여부를 보존한다', () => {
     expect(parseScheduleSettings({ ...DEFAULT_SCHEDULE_SETTINGS, transportEnabled: false })?.transportEnabled).toBe(false)
+  })
+
+  it('기존 설정에는 학생 아이콘과 이름을 기본으로 표시한다', () => {
+    const {
+      showStudentAvatars: _showStudentAvatars,
+      showStudentNames: _showStudentNames,
+      ...legacySettings
+    } = DEFAULT_SCHEDULE_SETTINGS
+    expect(parseScheduleSettings(legacySettings)).toMatchObject({ showStudentAvatars: true, showStudentNames: true })
+  })
+
+  it('학생 아이콘과 이름 표시 여부를 각각 보존한다', () => {
+    expect(parseScheduleSettings({
+      ...DEFAULT_SCHEDULE_SETTINGS,
+      showStudentAvatars: false,
+      showStudentNames: false,
+    })).toMatchObject({ showStudentAvatars: false, showStudentNames: false })
   })
 })
