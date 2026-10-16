@@ -132,6 +132,11 @@ export function createId(prefix: string): string {
   return `${prefix}-${value}`
 }
 
+export function matchesDeletionConfirmation(input: string, targetName: string): boolean {
+  const normalizedTarget = targetName.trim()
+  return normalizedTarget.length > 0 && input.trim() === normalizedTarget
+}
+
 export function timeToMinutes(value: string): number {
   const match = /^(\d{2}):(\d{2})$/.exec(value)
   if (!match) return Number.NaN

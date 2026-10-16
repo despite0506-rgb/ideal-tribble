@@ -31,6 +31,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  TriangleAlert,
   UserPlus,
   UserRound,
   UsersRound,
@@ -66,6 +67,7 @@ import {
   layoutLessons,
   lessonsForStudent,
   matchesKoreanSearch,
+  matchesDeletionConfirmation,
   minutesToTime,
   timeToMinutes,
   validateLesson,
@@ -603,6 +605,63 @@ function ModalFrame({ title, eyebrow, onClose, children, wide = false }: { title
   )
 }
 
+function DeleteConfirmationModal({
+  kind,
+  targetName,
+  description,
+  onBack,
+  onConfirm,
+}: {
+  kind: 'lesson' | 'student'
+  targetName: string
+  description: string
+  onBack: () => void
+  onConfirm: () => void
+}) {
+  const [confirmationName, setConfirmationName] = useState('')
+  const matches = matchesDeletionConfirmation(confirmationName, targetName)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (matches) onConfirm()
+  }
+
+  return (
+    <ModalFrame title={kind === 'lesson' ? '수업 삭제' : '학생 삭제'} eyebrow="삭제 최종 확인" onClose={onBack}>
+      <form onSubmit={submit}>
+        <div className="modal-body delete-confirmation-body">
+          <span className="delete-warning-icon"><TriangleAlert size={24} aria-hidden="true" /></span>
+          <div className="delete-warning-copy">
+            <h3>삭제한 자료는 되돌릴 수 없습니다.</h3>
+            <p>{description}</p>
+          </div>
+          <label className="field delete-name-field">
+            <span>확인을 위해 아래 {kind === 'lesson' ? '수업 이름' : '학생 이름'}을 입력하세요.</span>
+            <strong>{targetName}</strong>
+            <input
+              autoFocus
+              value={confirmationName}
+              onChange={(event) => setConfirmationName(event.target.value)}
+              placeholder={targetName}
+              autoComplete="off"
+              aria-describedby="delete-name-status"
+            />
+            <small id="delete-name-status" className={confirmationName && !matches ? 'mismatch' : ''}>
+              {confirmationName && !matches ? '이름이 일치하지 않습니다.' : '이름이 정확히 일치해야 삭제할 수 있습니다.'}
+            </small>
+          </label>
+        </div>
+        <footer className="modal-footer">
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onBack}>취소</button>
+          <button type="submit" className="button primary delete-confirm-button" disabled={!matches}>
+            <Trash2 size={16} /> 최종 삭제
+          </button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function NameSettingsModal({
   settings,
   onClose,
@@ -677,12 +736,14 @@ function NameSettingsModal({
 
 function StudentModal({
   student,
+  relatedLessonCount,
   transportEnabled,
   onClose,
   onSave,
   onDelete,
 }: {
   student?: Student
+  relatedLessonCount: number
   transportEnabled: boolean
   onClose: () => void
   onSave: (student: Student) => void
@@ -695,6 +756,19 @@ function StudentModal({
   const [transport, setTransport] = useState<Transport>(student?.defaultTransport ?? { arrivalRide: false, departureRide: false })
   const [notionUrl, setNotionUrl] = useState(student?.notionUrl ?? '')
   const [error, setError] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  if (student && confirmingDelete) {
+    return (
+      <DeleteConfirmationModal
+        kind="student"
+        targetName={student.name}
+        description={`학생 정보와 피드백, 출석 기록, 연결된 수업 ${relatedLessonCount}개가 함께 삭제됩니다. 그룹 수업이 포함되어 있다면 다른 참여 학생의 시간표에서도 해당 수업 전체가 삭제됩니다.`}
+        onBack={() => setConfirmingDelete(false)}
+        onConfirm={() => onDelete(student.id)}
+      />
+    )
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -772,7 +846,7 @@ function StudentModal({
         </div>
         <footer className="modal-footer">
           {student && (
-            <button type="button" className="button danger-ghost" onClick={() => onDelete(student.id)}>
+            <button type="button" className="button danger-ghost" onClick={() => setConfirmingDelete(true)}>
               <Trash2 size={16} /> 학생 삭제
             </button>
           )}
@@ -1267,6 +1341,21 @@ function LessonModal({
     [initialWeekday]: initialRides,
   })
   const [errors, setErrors] = useState<string[]>([])
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  if (lesson && confirmingDelete) {
+    return (
+      <DeleteConfirmationModal
+        kind="lesson"
+        targetName={lesson.label}
+        description={lesson.kind === 'group'
+          ? '이 그룹 수업은 모든 참여 학생의 시간표에서 함께 삭제됩니다. 이미 저장된 출석 기록은 월별 리포트에 보존됩니다.'
+          : '이 수업은 시간표에서 삭제됩니다. 이미 저장된 출석 기록은 월별 리포트에 보존됩니다.'}
+        onBack={() => setConfirmingDelete(false)}
+        onConfirm={() => onDelete(lesson.id)}
+      />
+    )
+  }
 
   const rideFor = (studentId: string, weekday?: Weekday): Transport => {
     const weekdayTransport = weekday === undefined ? undefined : weekdayRides[weekday]?.[studentId]
@@ -1554,7 +1643,7 @@ function LessonModal({
         </div>
         <footer className="modal-footer">
           {lesson && (
-            <button type="button" className="button danger-ghost" onClick={() => onDelete(lesson.id)}>
+            <button type="button" className="button danger-ghost" onClick={() => setConfirmingDelete(true)}>
               <Trash2 size={16} /> 수업 삭제
             </button>
           )}
@@ -2243,7 +2332,6 @@ export default function App() {
   }
 
   const deleteLesson = (lessonId: string) => {
-    if (!window.confirm('이 수업을 삭제할까요? 그룹 수업은 모든 참여 학생의 시간표에서 함께 삭제됩니다.')) return
     setAppState((current) => ({ ...current, lessons: current.lessons.filter((lesson) => lesson.id !== lessonId) }))
     setLessonModal({ open: false })
     setNotice('수업을 삭제했습니다.')
@@ -2315,8 +2403,6 @@ export default function App() {
   }
 
   const deleteStudent = (studentId: string) => {
-    const relatedCount = appState.lessons.filter((lesson) => lesson.participants.some((participant) => participant.studentId === studentId)).length
-    if (!window.confirm(`학생을 삭제하면 연결된 수업 ${relatedCount}개도 함께 삭제됩니다. 계속할까요?`)) return
     setAppState((current) => ({
       ...current,
       students: current.students.filter((student) => student.id !== studentId),
@@ -2329,7 +2415,7 @@ export default function App() {
       setView('students')
     }
     setStudentModal({ open: false })
-    setNotice('학생과 연결된 수업을 삭제했습니다.')
+    setNotice('학생과 연결된 수업·출석 기록을 삭제했습니다.')
   }
 
   const showStudentSchedule = (studentId: string) => {
@@ -2905,6 +2991,9 @@ export default function App() {
         <StudentModal
           key={studentModal.studentId ?? 'new'}
           student={activeEditStudent}
+          relatedLessonCount={activeEditStudent
+            ? appState.lessons.filter((lesson) => lesson.participants.some((participant) => participant.studentId === activeEditStudent.id)).length
+            : 0}
           transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setStudentModal({ open: false })}
           onSave={saveStudent}

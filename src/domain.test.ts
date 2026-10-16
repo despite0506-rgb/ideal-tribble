@@ -16,6 +16,7 @@ import {
   lessonsForStudent,
   minutesToTime,
   matchesKoreanSearch,
+  matchesDeletionConfirmation,
   timeToMinutes,
   validateLesson,
   validateState,
@@ -81,6 +82,16 @@ describe('표시 요일 설정', () => {
     expect(getScheduleColumns('hidden')).toHaveLength(5)
     expect(getScheduleColumns('combined').at(-1)?.weekdays).toEqual([6, 7])
     expect(getScheduleColumns('separate')).toHaveLength(7)
+  })
+})
+
+describe('삭제 이름 확인', () => {
+  it('대상 이름을 정확히 입력한 경우에만 삭제를 허용한다', () => {
+    expect(matchesDeletionConfirmation('수학 · 심화', '수학 · 심화')).toBe(true)
+    expect(matchesDeletionConfirmation('  김민준  ', '김민준')).toBe(true)
+    expect(matchesDeletionConfirmation('수학', '수학 · 심화')).toBe(false)
+    expect(matchesDeletionConfirmation('kim', 'Kim')).toBe(false)
+    expect(matchesDeletionConfirmation('', '')).toBe(false)
   })
 })
 
