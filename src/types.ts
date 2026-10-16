@@ -42,6 +42,7 @@ export type Lesson = {
   startMinute: number
   endMinute: number
   label: string
+  color?: string
   note: string
   participants: Participant[]
   createdAt: string

@@ -1439,11 +1439,12 @@ body.sidebar-resizing {
 }
 
 .lesson-card.group {
+  border-color: color-mix(in srgb, var(--lesson-color, var(--purple)) 38%, white);
   border-right: 3px solid var(--lesson-color-2, var(--purple));
-  border-left-color: var(--lesson-color, var(--purple));
+  border-left: 3px solid var(--lesson-color, var(--purple));
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 13%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 11%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 17%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 13%, white));
 }
 
 .lesson-card:hover,
@@ -1516,7 +1517,7 @@ body.sidebar-resizing {
 }
 
 .group .lesson-time {
-  color: #63468f;
+  color: color-mix(in srgb, var(--lesson-color, var(--purple)) 72%, #263b36);
 }
 
 .kind-badge {
@@ -1666,12 +1667,12 @@ body.sidebar-resizing {
 }
 
 .lesson-list-card.group {
-  border-color: #e3daf2;
+  border-color: color-mix(in srgb, var(--lesson-color, var(--purple)) 35%, white);
   border-right: 4px solid var(--lesson-color-2, var(--purple));
   border-left-color: var(--lesson-color, var(--purple));
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 8%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 7%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 12%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 9%, white));
 }
 
 .combined-day-label {
@@ -2621,6 +2622,7 @@ body.sidebar-resizing {
 .field > span,
 .color-field legend,
 .segmented-field legend,
+.lesson-color-picker legend,
 .weekday-picker legend,
 .group-weekday-times legend,
 .transport-box legend,
@@ -2727,6 +2729,7 @@ body.sidebar-resizing {
 
 .color-field,
 .segmented-field,
+.lesson-color-picker,
 .weekday-picker,
 .group-weekday-times,
 .transport-box,
@@ -2740,11 +2743,117 @@ body.sidebar-resizing {
 
 .color-field legend,
 .segmented-field legend,
+.lesson-color-picker legend,
 .weekday-picker legend,
 .group-weekday-times legend,
 .lesson-student-picker legend {
   margin-bottom: 8px;
 }
+
+.lesson-color-picker legend em {
+  color: var(--text-light);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.lesson-color-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.lesson-color-options > button {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+
+.lesson-color-options > button > span {
+  display: block;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  background: var(--swatch-color);
+}
+
+.lesson-color-options > button.selected,
+.lesson-custom-color.selected {
+  box-shadow: 0 0 0 2px var(--brand), 0 3px 9px rgba(18, 38, 32, .14);
+}
+
+.lesson-color-options > button.lesson-color-auto {
+  display: flex;
+  width: auto;
+  min-width: 69px;
+  gap: 6px;
+  padding: 0 9px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.lesson-color-auto > span { flex: 0 0 auto; }
+
+.lesson-custom-color {
+  position: relative;
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px 0 6px;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.lesson-custom-color input {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lesson-custom-color input::-webkit-color-swatch-wrapper { padding: 0; }
+.lesson-custom-color input::-webkit-color-swatch { border: 0; border-radius: 5px; }
+
+.lesson-color-picker > p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0 0;
+  color: var(--text-light);
+  font-size: 8px;
+}
+
+.lesson-color-picker > p > span {
+  width: 8px;
+  height: 8px;
+  margin-left: 5px;
+  border-radius: 3px;
+}
+
+.lesson-color-picker > p > span:first-child { margin-left: 0; }
+.lesson-color-picker > p > .elementary { background: #e78fb1; }
+.lesson-color-picker > p > .middle { background: #72b9e6; }
+.lesson-color-picker > p > .high { background: #e3b84f; }
 
 .weekday-picker legend {
   display: flex;
@@ -3887,6 +3996,7 @@ button.selected-student-chip {
   .mobile-bottom-nav { padding-right: 3%; padding-left: 3%; }
   .attendance-download { flex: 1; justify-content: center; }
   .modal-footer .button.secondary { display: none; }
+  .modal-footer .attendance-settings-button { display: inline-flex; padding: 0 10px; }
   .modal-footer .button.primary { flex: 1; }
   .lesson-student-tools { grid-template-columns: 1fr; }
 }

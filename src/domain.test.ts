@@ -6,6 +6,8 @@ import {
   intervalsOverlap,
   getScheduleColumns,
   getKoreanInitials,
+  getDefaultLessonColor,
+  getLessonColor,
   getStudentGradeGroup,
   gradeGroupSortValue,
   groupLessonsBySeries,
@@ -17,6 +19,7 @@ import {
   timeToMinutes,
   validateLesson,
   validateState,
+  DEFAULT_LESSON_COLORS,
 } from './domain'
 import type { AppState, AttendanceRecord, Lesson, LessonDraft, Student } from './types'
 
@@ -78,6 +81,25 @@ describe('표시 요일 설정', () => {
     expect(getScheduleColumns('hidden')).toHaveLength(5)
     expect(getScheduleColumns('combined').at(-1)?.weekdays).toEqual([6, 7])
     expect(getScheduleColumns('separate')).toHaveLength(7)
+  })
+})
+
+describe('수업 색상', () => {
+  const elementary = { ...students[0]!, school: '청운초', grade: '5학년' }
+  const middle = { ...students[1]!, school: '광희중', grade: '2학년' }
+  const high = { ...students[2]!, school: '북고', grade: '3학년' }
+  const levelStudents = [elementary, middle, high]
+
+  it('학교급에 맞는 기본 색상을 적용한다', () => {
+    expect(getDefaultLessonColor(['a'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.elementary)
+    expect(getDefaultLessonColor(['b'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.middle)
+    expect(getDefaultLessonColor(['c'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.high)
+  })
+
+  it('학교급이 섞인 그룹은 높은 학교급을 우선하고 직접 지정한 색은 유지한다', () => {
+    expect(getDefaultLessonColor(['a', 'b'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.middle)
+    expect(getDefaultLessonColor(['a', 'c'], levelStudents)).toBe(DEFAULT_LESSON_COLORS.high)
+    expect(getLessonColor({ ...lesson('custom', ['a'], 600, 660), color: '#123456' }, levelStudents)).toBe('#123456')
   })
 })
 
@@ -300,5 +322,10 @@ describe('저장 데이터 검증', () => {
     const { teacherId: _teacherId, ...legacyLesson } = lesson('legacy', ['a'], 600, 660)
     expect(validateState({ ...validState, lessons: [legacyLesson] })).toBe(true)
     expect(validateState({ ...validState, lessons: [{ ...lesson('bad-teacher', ['a'], 600, 660), teacherId: 'teacher-4' }] })).toBe(false)
+  })
+
+  it('올바른 수업 색상만 허용한다', () => {
+    expect(validateState({ ...validState, lessons: [{ ...lesson('color', ['a'], 600, 660), color: '#72b9e6' }] })).toBe(true)
+    expect(validateState({ ...validState, lessons: [{ ...lesson('bad-color', ['a'], 600, 660), color: 'skyblue' }] })).toBe(false)
   })
 })

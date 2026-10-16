@@ -47,6 +47,7 @@ import {
 } from 'react'
 import {
   type GroupLessonSeries,
+  LESSON_COLORS,
   STUDENT_COLORS,
   WEEKDAYS,
   createId,
@@ -55,6 +56,8 @@ import {
   dateForWeekdayInCurrentWeek,
   dateToInputValue,
   formatDuration,
+  getDefaultLessonColor,
+  getLessonColor,
   getStudentGradeGroup,
   gradeGroupSortValue,
   getScheduleColumns,
@@ -355,8 +358,7 @@ function Timeline({
                 ))}
                 {dayLessons.map((lesson) => {
                   const width = 100 / lesson.columnCount
-                  const firstStudent = studentById(students, lesson.participants[0]?.studentId ?? '')
-                  const secondStudent = studentById(students, lesson.participants[1]?.studentId ?? '')
+                  const lessonColor = getLessonColor(lesson, students)
                   const clippedStart = Math.max(lesson.startMinute, start)
                   const clippedEnd = Math.min(lesson.endMinute, end)
                   const cardStyle = {
@@ -364,8 +366,8 @@ function Timeline({
                     height: Math.max((clippedEnd - clippedStart) * PIXELS_PER_MINUTE - 6, 34),
                     left: `calc(${lesson.column * width}% + 3px)`,
                     width: `calc(${width}% - 6px)`,
-                    '--lesson-color': firstStudent?.color ?? '#2f6f68',
-                    '--lesson-color-2': secondStudent?.color ?? firstStudent?.color ?? '#2f6f68',
+                    '--lesson-color': lessonColor,
+                    '--lesson-color-2': lessonColor,
                   } as CSSProperties
                   return (
                     <button
@@ -449,11 +451,10 @@ function LessonList({
             ) : (
               <div className="lesson-list-cards">
                 {dayLessons.map((lesson) => {
-                  const firstStudent = studentById(students, lesson.participants[0]?.studentId ?? '')
-                  const secondStudent = studentById(students, lesson.participants[1]?.studentId ?? '')
+                  const lessonColor = getLessonColor(lesson, students)
                   const cardStyle = {
-                    '--lesson-color': firstStudent?.color ?? '#2f6f68',
-                    '--lesson-color-2': secondStudent?.color ?? firstStudent?.color ?? '#2f6f68',
+                    '--lesson-color': lessonColor,
+                    '--lesson-color-2': lessonColor,
                   } as CSSProperties
                   return (
                   <button
@@ -1207,7 +1208,7 @@ function AttendanceModal({
           {recordsForDate.length > 0 && <p className="attendance-saved-note">이 날짜에 저장된 출석 기록을 불러왔습니다.</p>}
         </div>
         <footer className="modal-footer">
-          <button type="button" className="button secondary" onClick={onOpenSettings}><Settings2 size={15} /> 수업 설정</button>
+          <button type="button" className="button secondary attendance-settings-button" onClick={onOpenSettings}><Settings2 size={15} /> 수업 설정</button>
           <span className="footer-spacer" />
           <button type="button" className="button secondary" onClick={onClose}>닫기</button>
           <button type="submit" className="button primary"><ClipboardCheck size={16} /> 출석 저장</button>
@@ -1258,6 +1259,7 @@ function LessonModal({
     [initialWeekday]: { start: initialStart, end: initialEnd },
   })
   const [label, setLabel] = useState(lesson?.label ?? '수학 · 정규')
+  const [color, setColor] = useState(lesson?.color ?? '')
   const [note, setNote] = useState(lesson?.note ?? '')
   const [participantIds, setParticipantIds] = useState<string[]>(initialParticipantIds)
   const [rides, setRides] = useState<Record<string, Transport>>(initialRides)
@@ -1320,6 +1322,7 @@ function LessonModal({
       groupSeriesId,
       teacherId: lesson?.teacherId ?? teacherId,
       label: label.trim(),
+      color: color || undefined,
       note: note.trim(),
     }
     const participantsForWeekday = (weekday: Weekday) => {
@@ -1408,6 +1411,41 @@ function LessonModal({
             <span>수업 이름 <em>필수</em></span>
             <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 수학 · 심화" />
           </label>
+          <fieldset className="lesson-color-picker">
+            <legend>수업 색상 <em>선택 · 미설정 시 학교급별 자동 적용</em></legend>
+            <div className="lesson-color-options">
+              <button
+                type="button"
+                className={`lesson-color-auto${color === '' ? ' selected' : ''}`}
+                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students) } as CSSProperties}
+                onClick={() => setColor('')}
+                aria-pressed={color === ''}
+              >
+                <span /> 자동
+              </button>
+              {LESSON_COLORS.map((option) => (
+                <button
+                  type="button"
+                  className={color === option ? 'selected' : ''}
+                  style={{ '--swatch-color': option } as CSSProperties}
+                  key={option}
+                  onClick={() => setColor(option)}
+                  aria-label={`${option} 수업 색상`}
+                  aria-pressed={color === option}
+                ><span /></button>
+              ))}
+              <label className={`lesson-custom-color${color && !LESSON_COLORS.includes(color as typeof LESSON_COLORS[number]) ? ' selected' : ''}`}>
+                <input
+                  type="color"
+                  value={color || getDefaultLessonColor(participantIds, students)}
+                  onChange={(event) => setColor(event.target.value)}
+                  aria-label="직접 수업 색상 선택"
+                />
+                직접 선택
+              </label>
+            </div>
+            <p><span className="elementary" />초등 분홍 <span className="middle" />중등 하늘 <span className="high" />고등 노랑</p>
+          </fieldset>
           <fieldset className="weekday-picker">
             <legend>
               요일 <em>필수 · {lesson ? '한 개 선택' : '여러 개 선택 가능'}</em>

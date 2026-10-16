@@ -51,6 +51,23 @@ export const STUDENT_COLORS = [
   '#596875',
 ]
 
+export const DEFAULT_LESSON_COLORS = {
+  elementary: '#e78fb1',
+  middle: '#72b9e6',
+  high: '#e3b84f',
+} as const
+
+export const LESSON_COLORS = [
+  DEFAULT_LESSON_COLORS.elementary,
+  DEFAULT_LESSON_COLORS.middle,
+  DEFAULT_LESSON_COLORS.high,
+  '#78b89a',
+  '#9b87d3',
+  '#e58b69',
+  '#5f7eb8',
+  '#c67ca4',
+] as const
+
 export type ScheduleColumn = {
   key: string
   short: string
@@ -173,6 +190,9 @@ export function validateLesson(
   }
   if (ids.some((id) => !students.some((student) => student.id === id))) {
     errors.push('등록되지 않은 학생이 포함되어 있습니다.')
+  }
+  if (draft.color !== undefined && !/^#[0-9a-f]{6}$/i.test(draft.color)) {
+    errors.push('수업 색상을 다시 선택해 주세요.')
   }
 
   if (errors.length === 0) {
@@ -322,6 +342,23 @@ export function getStudentGradeGroup(student: Pick<Student, 'school' | 'grade'>)
   return `${number}학년`
 }
 
+export function getDefaultLessonColor(studentIds: string[], students: Student[]): string {
+  const highestLevel = studentIds.reduce((highest, studentId) => {
+    const student = students.find((item) => item.id === studentId)
+    if (!student) return highest
+    const gradeGroup = getStudentGradeGroup(student)
+    const level = gradeGroup.startsWith('고') ? 3 : gradeGroup.startsWith('중') ? 2 : 1
+    return Math.max(highest, level)
+  }, 1)
+  if (highestLevel === 3) return DEFAULT_LESSON_COLORS.high
+  if (highestLevel === 2) return DEFAULT_LESSON_COLORS.middle
+  return DEFAULT_LESSON_COLORS.elementary
+}
+
+export function getLessonColor(lesson: Pick<Lesson, 'color' | 'participants'>, students: Student[]): string {
+  return lesson.color ?? getDefaultLessonColor(lesson.participants.map((participant) => participant.studentId), students)
+}
+
 export function gradeGroupSortValue(label: string): number {
   const match = /^(초|중|고)([1-6])$/.exec(label)
   if (!match) return label === '학년 미등록' ? 999 : 900
@@ -365,6 +402,7 @@ export function validateState(value: unknown): value is AppState {
     lessonIds.add(lesson.id)
     if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
     if (lesson.groupSeriesId !== undefined && typeof lesson.groupSeriesId !== 'string') return false
+    if (lesson.color !== undefined && (typeof lesson.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(lesson.color))) return false
     if (lesson.teacherId !== undefined && !['teacher-1', 'teacher-2', 'teacher-3'].includes(lesson.teacherId)) return false
     if (!Array.isArray(lesson.participants)) return false
     if (lesson.kind === 'individual' && lesson.participants.length !== 1) return false
