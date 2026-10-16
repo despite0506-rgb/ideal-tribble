@@ -1,12 +1,26 @@
 import type {
   AppState,
+  AttendanceRecord,
+  AttendanceStatus,
   Lesson,
   LessonDraft,
   LessonLayout,
   Student,
+  TeacherId,
   WeekendMode,
   Weekday,
 } from './types'
+
+export type MonthlyAttendanceSummary = {
+  studentId: string
+  scheduled: number
+  present: number
+  late: number
+  absent: number
+  excused: number
+  unchecked: number
+  attendanceRate: number | null
+}
 
 export const WEEKDAYS: { value: Weekday; short: string; long: string }[] = [
   { value: 1, short: '월', long: '월요일' },
@@ -227,6 +241,72 @@ export function getTodayWeekday(date = new Date()): Weekday {
   return (day === 0 ? 7 : day) as Weekday
 }
 
+export function dateToInputValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+export function dateForWeekdayInCurrentWeek(weekday: Weekday, reference = new Date()): string {
+  const monday = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate())
+  const referenceDay = reference.getDay() === 0 ? 7 : reference.getDay()
+  monday.setDate(monday.getDate() - referenceDay + 1 + weekday - 1)
+  return dateToInputValue(monday)
+}
+
+export function attendanceRecordId(lessonId: string, date: string, studentId: string): string {
+  return `attendance:${lessonId}:${date}:${studentId}`
+}
+
+export function lessonOccurrenceDates(lesson: Pick<Lesson, 'weekday'>, month: string): string[] {
+  if (!/^\d{4}-\d{2}$/.test(month)) return []
+  const [yearText, monthText] = month.split('-')
+  const year = Number(yearText)
+  const monthIndex = Number(monthText) - 1
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) return []
+  const lastDate = new Date(year, monthIndex + 1, 0).getDate()
+  return Array.from({ length: lastDate }, (_, index) => new Date(year, monthIndex, index + 1))
+    .filter((date) => getTodayWeekday(date) === lesson.weekday)
+    .map(dateToInputValue)
+}
+
+export function buildMonthlyAttendanceSummaries(
+  students: Student[],
+  lessons: Lesson[],
+  records: AttendanceRecord[],
+  month: string,
+  teacherId: TeacherId | 'all' = 'all',
+  referenceDate = new Date(),
+): MonthlyAttendanceSummary[] {
+  const cutoffDate = dateToInputValue(referenceDate)
+  const relevantLessons = lessons.filter((lesson) => teacherId === 'all' || lesson.teacherId === teacherId)
+  const relevantRecords = records.filter((record) => (
+    record.date.startsWith(`${month}-`) && (teacherId === 'all' || record.teacherId === teacherId)
+  ))
+
+  return students.map((student) => {
+    const sessionKeys = new Set<string>()
+    relevantLessons.forEach((lesson) => {
+      if (!lesson.participants.some((participant) => participant.studentId === student.id)) return
+      const createdDate = new Date(lesson.createdAt)
+      const firstScheduledDate = Number.isNaN(createdDate.getTime()) ? '' : dateToInputValue(createdDate)
+      lessonOccurrenceDates(lesson, month)
+        .filter((date) => date >= firstScheduledDate && date <= cutoffDate)
+        .forEach((date) => sessionKeys.add(`${lesson.id}|${date}`))
+    })
+    const studentRecords = relevantRecords.filter((record) => record.studentId === student.id)
+    studentRecords.forEach((record) => sessionKeys.add(`${record.lessonId}|${record.date}`))
+    const counts: Record<AttendanceStatus, number> = { present: 0, late: 0, absent: 0, excused: 0 }
+    studentRecords.forEach((record) => { counts[record.status] += 1 })
+    const checkedForRate = counts.present + counts.late + counts.absent
+    return {
+      studentId: student.id,
+      scheduled: sessionKeys.size,
+      ...counts,
+      unchecked: Math.max(0, sessionKeys.size - studentRecords.length),
+      attendanceRate: checkedForRate > 0 ? Math.round(((counts.present + counts.late) / checkedForRate) * 100) : null,
+    }
+  })
+}
+
 export function getStudentGradeGroup(student: Pick<Student, 'school' | 'grade'>): string {
   const grade = student.grade.trim()
   if (!grade) return '학년 미등록'
@@ -294,6 +374,21 @@ export function validateState(value: unknown): value is AppState {
     if (!Number.isInteger(lesson.weekday) || lesson.weekday < 1 || lesson.weekday > 7) return false
     if (!Number.isInteger(lesson.startMinute) || !Number.isInteger(lesson.endMinute)) return false
     if (lesson.startMinute < 0 || lesson.startMinute >= lesson.endMinute || lesson.endMinute > 1440) return false
+  }
+  if (state.attendanceRecords !== undefined) {
+    if (!Array.isArray(state.attendanceRecords)) return false
+    const attendanceIds = new Set<string>()
+    for (const record of state.attendanceRecords) {
+      if (!record || typeof record !== 'object') return false
+      if (typeof record.id !== 'string' || attendanceIds.has(record.id)) return false
+      attendanceIds.add(record.id)
+      if (typeof record.lessonId !== 'string' || typeof record.lessonLabel !== 'string') return false
+      if (!['teacher-1', 'teacher-2', 'teacher-3'].includes(record.teacherId)) return false
+      if (typeof record.studentId !== 'string' || !studentIds.has(record.studentId)) return false
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date)) return false
+      if (!['present', 'late', 'absent', 'excused'].includes(record.status)) return false
+      if (typeof record.note !== 'string' || typeof record.updatedAt !== 'string') return false
+    }
   }
   return true
 }

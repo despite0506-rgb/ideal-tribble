@@ -30,6 +30,7 @@ export const normalizeState = (state: AppState): AppState => ({
       ? lesson.teacherId
       : 'teacher-1',
   })),
+  attendanceRecords: Array.isArray(state.attendanceRecords) ? state.attendanceRecords : [],
 })
 
 export function parseAppState(value: unknown): AppState | null {

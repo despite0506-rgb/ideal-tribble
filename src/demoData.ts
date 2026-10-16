@@ -59,4 +59,5 @@ export const DEMO_STATE: AppState = {
       participant('student-jiho', true, false),
     ]),
   ],
+  attendanceRecords: [],
 }

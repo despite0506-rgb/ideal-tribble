@@ -7,10 +7,13 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Cloud,
   CloudOff,
   Copy,
+  Download,
   ExternalLink,
   LayoutDashboard,
   List,
@@ -47,6 +50,10 @@ import {
   STUDENT_COLORS,
   WEEKDAYS,
   createId,
+  attendanceRecordId,
+  buildMonthlyAttendanceSummaries,
+  dateForWeekdayInCurrentWeek,
+  dateToInputValue,
   formatDuration,
   getStudentGradeGroup,
   gradeGroupSortValue,
@@ -61,10 +68,10 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
-type View = 'schedule' | 'groups' | 'students' | 'student'
+type View = 'schedule' | 'groups' | 'attendance' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
 type Selection = 'all' | string
 
@@ -102,6 +109,12 @@ const SCHOOL_GROUPS = [
   { label: '중학교', schools: ['광희중', '북평중', '예람중', '삼육중'] },
   { label: '고등학교', schools: ['북여고', '북고', '광희고'] },
 ] as const
+const ATTENDANCE_STATUSES: { value: AttendanceStatus; label: string; short: string }[] = [
+  { value: 'present', label: '출석', short: '출' },
+  { value: 'late', label: '지각', short: '지' },
+  { value: 'absent', label: '결석', short: '결' },
+  { value: 'excused', label: '인정', short: '인' },
+]
 
 type BulkStudentRow = {
   id: string
@@ -117,6 +130,32 @@ function gradeOptionsForSchool(school: string): string[] {
 
 function createBulkStudentRow(): BulkStudentRow {
   return { id: createId('student-row'), name: '', school: '청운초', grade: '1학년' }
+}
+
+function shiftDateValue(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  date.setDate(date.getDate() + days)
+  return dateToInputValue(date)
+}
+
+function shiftMonthValue(value: string, months: number): string {
+  const [year, month] = value.split('-').map(Number)
+  if (!year || !month) return value
+  const date = new Date(year, month - 1 + months, 1)
+  return dateToInputValue(date).slice(0, 7)
+}
+
+function koreanDateLabel(value: string): string {
+  const date = new Date(`${value}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(date)
+}
+
+function koreanMonthLabel(value: string): string {
+  const [year, month] = value.split('-').map(Number)
+  if (!year || !month) return value
+  return `${year}년 ${month}월`
 }
 
 function initials(name: string): string {
@@ -1025,6 +1064,159 @@ function LessonTimeInput({
   )
 }
 
+type AttendanceDraft = {
+  status?: AttendanceStatus
+  note: string
+}
+
+function AttendanceModal({
+  lesson,
+  students,
+  records,
+  teacherName,
+  onClose,
+  onOpenSettings,
+  onSave,
+}: {
+  lesson: Lesson
+  students: Student[]
+  records: AttendanceRecord[]
+  teacherName: string
+  onClose: () => void
+  onOpenSettings: () => void
+  onSave: (date: string, records: AttendanceRecord[]) => void
+}) {
+  const [date, setDate] = useState(() => dateForWeekdayInCurrentWeek(lesson.weekday))
+  const recordsForDate = records.filter((record) => record.lessonId === lesson.id && record.date === date)
+  const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>(() => Object.fromEntries(
+    lesson.participants.map((participant) => {
+      const record = records.find((item) => (
+        item.lessonId === lesson.id && item.studentId === participant.studentId
+        && item.date === dateForWeekdayInCurrentWeek(lesson.weekday)
+      ))
+      return [participant.studentId, { status: record?.status, note: record?.note ?? '' }]
+    }),
+  ))
+
+  useEffect(() => {
+    setDrafts(Object.fromEntries(lesson.participants.map((participant) => {
+      const record = records.find((item) => (
+        item.lessonId === lesson.id && item.studentId === participant.studentId && item.date === date
+      ))
+      return [participant.studentId, { status: record?.status, note: record?.note ?? '' }]
+    })))
+  }, [date, lesson.id, lesson.participants, records])
+
+  const setStatus = (studentId: string, status?: AttendanceStatus) => {
+    setDrafts((current) => ({
+      ...current,
+      [studentId]: { ...current[studentId], status, note: current[studentId]?.note ?? '' },
+    }))
+  }
+  const setAllPresent = () => {
+    setDrafts((current) => Object.fromEntries(lesson.participants.map((participant) => [
+      participant.studentId,
+      { status: 'present', note: current[participant.studentId]?.note ?? '' },
+    ])))
+  }
+  const checkedCount = lesson.participants.filter((participant) => drafts[participant.studentId]?.status).length
+  const save = (event: FormEvent) => {
+    event.preventDefault()
+    const updatedAt = new Date().toISOString()
+    onSave(date, lesson.participants.flatMap((participant) => {
+      const draft = drafts[participant.studentId]
+      if (!draft?.status) return []
+      return [{
+        id: attendanceRecordId(lesson.id, date, participant.studentId),
+        lessonId: lesson.id,
+        lessonLabel: lesson.label,
+        teacherId: lesson.teacherId,
+        studentId: participant.studentId,
+        date,
+        status: draft.status,
+        note: draft.note.trim(),
+        updatedAt,
+      }]
+    }))
+  }
+
+  return (
+    <ModalFrame title="출석 체크" eyebrow={`${teacherName} · ${lesson.label}`} onClose={onClose} wide>
+      <form onSubmit={save}>
+        <div className="modal-body attendance-modal-body">
+          <section className="attendance-lesson-summary">
+            <div>
+              <span>{WEEKDAYS.find((day) => day.value === lesson.weekday)?.long}</span>
+              <strong>{minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)}</strong>
+              <small>{lesson.kind === 'group' ? `${lesson.participants.length}명 그룹 수업` : '개인 수업'}</small>
+            </div>
+            <div className="attendance-date-control">
+              <button type="button" onClick={() => setDate((current) => shiftDateValue(current, -7))} aria-label="이전 주"><ChevronLeft size={16} /></button>
+              <label>
+                <span>{koreanDateLabel(date)}</span>
+                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+              </label>
+              <button type="button" onClick={() => setDate((current) => shiftDateValue(current, 7))} aria-label="다음 주"><ChevronRight size={16} /></button>
+            </div>
+          </section>
+
+          <div className="attendance-check-toolbar">
+            <span><strong>{checkedCount}</strong> / {lesson.participants.length}명 체크</span>
+            <div>
+              <button type="button" onClick={() => setDrafts((current) => Object.fromEntries(Object.entries(current).map(([studentId, draft]) => [studentId, { ...draft, status: undefined }]))) }>전체 해제</button>
+              <button type="button" className="all-present" onClick={setAllPresent}><Check size={14} /> 모두 출석</button>
+            </div>
+          </div>
+
+          <div className="attendance-student-list">
+            {lesson.participants.map((participant) => {
+              const student = studentById(students, participant.studentId)
+              if (!student) return null
+              const draft = drafts[student.id] ?? { note: '' }
+              return (
+                <article className="attendance-student-row" key={student.id}>
+                  <div className="attendance-student-name">
+                    <Avatar student={student} size="md" />
+                    <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
+                  </div>
+                  <div className="attendance-status-options" role="group" aria-label={`${student.name} 출결 상태`}>
+                    {ATTENDANCE_STATUSES.map((status) => (
+                      <button
+                        type="button"
+                        className={`${status.value}${draft.status === status.value ? ' active' : ''}`}
+                        key={status.value}
+                        onClick={() => setStatus(student.id, draft.status === status.value ? undefined : status.value)}
+                        aria-pressed={draft.status === status.value}
+                      >
+                        <span>{status.short}</span>{status.label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="attendance-note">
+                    <span className="sr-only">{student.name} 출석 메모</span>
+                    <input
+                      value={draft.note}
+                      onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, note: event.target.value } }))}
+                      placeholder="메모 (선택)"
+                    />
+                  </label>
+                </article>
+              )
+            })}
+          </div>
+          {recordsForDate.length > 0 && <p className="attendance-saved-note">이 날짜에 저장된 출석 기록을 불러왔습니다.</p>}
+        </div>
+        <footer className="modal-footer">
+          <button type="button" className="button secondary" onClick={onOpenSettings}><Settings2 size={15} /> 수업 설정</button>
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onClose}>닫기</button>
+          <button type="submit" className="button primary"><ClipboardCheck size={16} /> 출석 저장</button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function LessonModal({
   lesson,
   students,
@@ -1490,6 +1682,123 @@ function GroupManagementPage({
   )
 }
 
+function AttendanceReportPage({
+  students,
+  lessons,
+  records,
+  teacherNames,
+}: {
+  students: Student[]
+  lessons: Lesson[]
+  records: AttendanceRecord[]
+  teacherNames: ScheduleSettings['teacherNames']
+}) {
+  const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
+  const [teacherFilter, setTeacherFilter] = useState<TeacherId | 'all'>('all')
+  const [query, setQuery] = useState('')
+  const summaries = buildMonthlyAttendanceSummaries(students, lessons, records, month, teacherFilter)
+  const filteredSummaries = summaries.filter((summary) => {
+    const student = studentById(students, summary.studentId)
+    return student && (
+      matchesKoreanSearch(student.name, query)
+      || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))
+    )
+  })
+  const totals = summaries.reduce((result, summary) => ({
+    scheduled: result.scheduled + summary.scheduled,
+    present: result.present + summary.present,
+    late: result.late + summary.late,
+    absent: result.absent + summary.absent,
+    excused: result.excused + summary.excused,
+    unchecked: result.unchecked + summary.unchecked,
+  }), { scheduled: 0, present: 0, late: 0, absent: 0, excused: 0, unchecked: 0 })
+  const checkedForRate = totals.present + totals.late + totals.absent
+  const overallRate = checkedForRate > 0 ? Math.round(((totals.present + totals.late) / checkedForRate) * 100) : null
+
+  const downloadCsv = () => {
+    const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
+    const rows = filteredSummaries.map((summary) => {
+      const student = studentById(students, summary.studentId)
+      return [
+        student?.name ?? '', student?.school ?? '', student?.grade ?? '', summary.scheduled,
+        summary.present, summary.late, summary.absent, summary.excused, summary.unchecked,
+        summary.attendanceRate === null ? '' : `${summary.attendanceRate}%`,
+      ]
+    })
+    const csv = [
+      ['이름', '학교', '학년', '대상 수업', '출석', '지각', '결석', '인정', '미체크', '출석률'],
+      ...rows,
+    ].map((row) => row.map(escape).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${month}-출석리포트.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <section className="attendance-report-page">
+      <header className="attendance-report-toolbar">
+        <div className="month-selector">
+          <button type="button" onClick={() => setMonth((current) => shiftMonthValue(current, -1))} aria-label="이전 달"><ChevronLeft size={17} /></button>
+          <label><span>{koreanMonthLabel(month)}</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+          <button type="button" onClick={() => setMonth((current) => shiftMonthValue(current, 1))} aria-label="다음 달"><ChevronRight size={17} /></button>
+        </div>
+        <label className="attendance-teacher-filter">
+          <span className="sr-only">선생님 필터</span>
+          <select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value as TeacherId | 'all')}>
+            <option value="all">전체 선생님</option>
+            {TEACHERS.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacherNames[teacher.index]}</option>)}
+          </select>
+        </label>
+        <label className="page-search attendance-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름·초성 검색" aria-label="출석 학생 검색" /></label>
+        <button type="button" className="button secondary attendance-download" onClick={downloadCsv}><Download size={15} /> CSV 다운로드</button>
+      </header>
+
+      <div className="attendance-summary-cards">
+        <article><span>대상 수업</span><strong>{totals.scheduled}</strong><small>오늘까지 전체 합계</small></article>
+        <article><span>체크 완료</span><strong>{totals.present + totals.late + totals.absent + totals.excused}</strong><small>출석 기록</small></article>
+        <article className={totals.unchecked > 0 ? 'needs-check' : ''}><span>미체크</span><strong>{totals.unchecked}</strong><small>{totals.unchecked > 0 ? '확인 필요' : '모두 완료'}</small></article>
+        <article><span>출석률</span><strong>{overallRate === null ? '—' : `${overallRate}%`}</strong><small>출석·지각 포함</small></article>
+      </div>
+
+      <section className="attendance-report-table-card">
+        <header>
+          <div><ClipboardCheck size={18} /><h2>전체 원생 월별 출석</h2></div>
+          <span>{filteredSummaries.length}명 · 인정결석은 출석률 계산에서 제외</span>
+        </header>
+        <div className="attendance-table-scroll">
+          <table className="attendance-report-table">
+            <thead>
+              <tr><th>학생</th><th>수업</th><th>출석</th><th>지각</th><th>결석</th><th>인정</th><th>미체크</th><th>출석률</th></tr>
+            </thead>
+            <tbody>
+              {filteredSummaries.map((summary) => {
+                const student = studentById(students, summary.studentId)
+                if (!student) return null
+                return (
+                  <tr key={student.id}>
+                    <td><div className="attendance-report-student"><Avatar student={student} size="sm" /><span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span></div></td>
+                    <td><strong>{summary.scheduled}</strong></td>
+                    <td><span className="attendance-count present">{summary.present}</span></td>
+                    <td><span className="attendance-count late">{summary.late}</span></td>
+                    <td><span className="attendance-count absent">{summary.absent}</span></td>
+                    <td><span className="attendance-count excused">{summary.excused}</span></td>
+                    <td><span className={`attendance-count unchecked${summary.unchecked > 0 ? ' active' : ''}`}>{summary.unchecked}</span></td>
+                    <td><div className="attendance-rate"><strong>{summary.attendanceRate === null ? '—' : `${summary.attendanceRate}%`}</strong><span><i style={{ width: `${summary.attendanceRate ?? 0}%` }} /></span></div></td>
+                  </tr>
+                )
+              })}
+              {filteredSummaries.length === 0 && <tr><td colSpan={8} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  )
+}
+
 function StudentDetail({
   student,
   lessons,
@@ -1787,6 +2096,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scheduleFullscreen, setScheduleFullscreen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
+  const [attendanceModalLessonId, setAttendanceModalLessonId] = useState<string | null>(null)
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
@@ -1901,6 +2211,21 @@ export default function App() {
     setNotice('수업을 삭제했습니다.')
   }
 
+  const saveAttendance = (lesson: Lesson, date: string, savedRecords: AttendanceRecord[]) => {
+    const participantIds = new Set(lesson.participants.map((participant) => participant.studentId))
+    setAppState((current) => ({
+      ...current,
+      attendanceRecords: [
+        ...current.attendanceRecords.filter((record) => !(
+          record.lessonId === lesson.id && record.date === date && participantIds.has(record.studentId)
+        )),
+        ...savedRecords,
+      ],
+    }))
+    setAttendanceModalLessonId(null)
+    setNotice(`${koreanDateLabel(date)} 출석을 저장했습니다.`)
+  }
+
   const saveStudent = (student: Student) => {
     setAppState((current) => ({
       ...current,
@@ -1958,6 +2283,7 @@ export default function App() {
       ...current,
       students: current.students.filter((student) => student.id !== studentId),
       lessons: current.lessons.filter((lesson) => !lesson.participants.some((participant) => participant.studentId === studentId)),
+      attendanceRecords: current.attendanceRecords.filter((record) => record.studentId !== studentId),
     }))
     if (selectedStudentId === studentId) setSelectedStudentId('all')
     if (detailStudentId === studentId) {
@@ -2065,6 +2391,9 @@ export default function App() {
   const activeLesson = lessonModal.lessonId
     ? appState.lessons.find((lesson) => lesson.id === lessonModal.lessonId)
     : undefined
+  const activeAttendanceLesson = attendanceModalLessonId
+    ? appState.lessons.find((lesson) => lesson.id === attendanceModalLessonId)
+    : undefined
   const activeEditStudent = studentModal.studentId
     ? studentById(appState.students, studentModal.studentId)
     : undefined
@@ -2105,6 +2434,9 @@ export default function App() {
           </button>
           <button type="button" className={view === 'groups' ? 'active' : ''} onClick={() => setView('groups')}>
             <UsersRound size={18} /> 그룹 수업 <span>{groupSeries.length}</span>
+          </button>
+          <button type="button" className={view === 'attendance' ? 'active' : ''} onClick={() => setView('attendance')}>
+            <ClipboardCheck size={18} /> 출석 관리 <span>{appState.attendanceRecords.filter((record) => record.date.startsWith(dateToInputValue(new Date()).slice(0, 7))).length}</span>
           </button>
           <button type="button" className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}>
             <UsersRound size={18} /> 학생 관리 <span>{appState.students.length}</span>
@@ -2182,21 +2514,25 @@ export default function App() {
               ? (selectedStudent ? `${selectedStudent.name} · ${activeTeacherName}` : `${activeTeacherName} 시간표`)
               : view === 'groups'
                 ? `${activeTeacherName} 그룹 수업`
-                : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
+                : view === 'attendance' ? '월별 출석 관리'
+                  : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
             <p>{view === 'schedule'
               ? (scheduleSettings.transportEnabled ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : '매주 반복되는 수업을 한눈에 확인하세요.')
               : view === 'groups'
                 ? '그룹 일정과 참여 인원을 한곳에서 관리하세요.'
-                : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
+                : view === 'attendance' ? '전체 원생의 월별 출결 현황과 미체크 수업을 확인하세요.'
+                  : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
           </div>
-          <button type="button" className="button primary top-add" onClick={() => {
-            if (view === 'students') setBulkStudentModalOpen(true)
-            else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
-            else openNewLesson(undefined, view === 'student' ? detailStudent?.id : undefined)
-          }}>
-            {view === 'students' ? <UserPlus size={17} /> : view === 'groups' ? <UsersRound size={17} /> : <CalendarDays size={17} />}
-            {view === 'students' ? '학생 등록' : view === 'groups' ? '그룹 추가' : '수업 추가'}
-          </button>
+          {view !== 'attendance' && (
+            <button type="button" className="button primary top-add" onClick={() => {
+              if (view === 'students') setBulkStudentModalOpen(true)
+              else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
+              else openNewLesson(undefined, view === 'student' ? detailStudent?.id : undefined)
+            }}>
+              {view === 'students' ? <UserPlus size={17} /> : view === 'groups' ? <UsersRound size={17} /> : <CalendarDays size={17} />}
+              {view === 'students' ? '학생 등록' : view === 'groups' ? '그룹 추가' : '수업 추가'}
+            </button>
+          )}
         </header>
 
         {storageWarning && (
@@ -2395,12 +2731,12 @@ export default function App() {
                 <>
                   <div className="desktop-schedule">
                     {scheduleDisplay === 'timeline' ? (
-                      <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} onAddAt={(weekday) => openNewLesson(weekday)} />
+                      <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} transportEnabled={scheduleSettings.transportEnabled} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} transportEnabled={scheduleSettings.transportEnabled} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} />
                 </>
               )}
             </section>
@@ -2418,6 +2754,13 @@ export default function App() {
             onManageMembers={setGroupMembersModalId}
             onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })}
             onAddGroup={() => openNewLesson(undefined, undefined, 'group')}
+          />
+        ) : view === 'attendance' ? (
+          <AttendanceReportPage
+            students={appState.students}
+            lessons={appState.lessons}
+            records={appState.attendanceRecords}
+            teacherNames={scheduleSettings.teacherNames}
           />
         ) : view === 'students' ? (
           <section className="students-page">
@@ -2465,7 +2808,7 @@ export default function App() {
             onBack={() => setView('students')}
             onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
             onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
-            onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })}
+            onOpenLesson={setAttendanceModalLessonId}
             onAddFeedback={(feedback) => addFeedback(detailStudent.id, feedback)}
             onDeleteFeedback={(feedbackId) => deleteFeedback(detailStudent.id, feedbackId)}
             onNotice={setNotice}
@@ -2481,9 +2824,11 @@ export default function App() {
         <button type="button" className="mobile-add" onClick={() => {
           if (view === 'schedule') openNewLesson(selectedDay)
           else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
+          else if (view === 'attendance') openNewLesson(selectedDay)
           else if (view === 'student') openNewLesson(undefined, detailStudent?.id)
           else setBulkStudentModalOpen(true)
         }}><Plus size={23} /><span>추가</span></button>
+        <button type="button" className={view === 'attendance' ? 'active' : ''} onClick={() => setView('attendance')}><ClipboardCheck size={20} /><span>출석</span></button>
         <button type="button" className={view === 'students' || view === 'student' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
       </nav>
 
@@ -2501,6 +2846,21 @@ export default function App() {
           onClose={() => setLessonModal({ open: false })}
           onSave={saveLessons}
           onDelete={deleteLesson}
+        />
+      )}
+      {activeAttendanceLesson && (
+        <AttendanceModal
+          key={activeAttendanceLesson.id}
+          lesson={activeAttendanceLesson}
+          students={appState.students}
+          records={appState.attendanceRecords}
+          teacherName={scheduleSettings.teacherNames[TEACHERS.find((teacher) => teacher.id === activeAttendanceLesson.teacherId)?.index ?? 0]}
+          onClose={() => setAttendanceModalLessonId(null)}
+          onOpenSettings={() => {
+            setAttendanceModalLessonId(null)
+            setLessonModal({ open: true, lessonId: activeAttendanceLesson.id })
+          }}
+          onSave={(date, records) => saveAttendance(activeAttendanceLesson, date, records)}
         />
       )}
       {studentModal.open && (

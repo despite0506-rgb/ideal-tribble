@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attendanceRecordId,
+  buildMonthlyAttendanceSummaries,
+  dateForWeekdayInCurrentWeek,
   intervalsOverlap,
   getScheduleColumns,
   getKoreanInitials,
@@ -7,6 +10,7 @@ import {
   gradeGroupSortValue,
   groupLessonsBySeries,
   layoutLessons,
+  lessonOccurrenceDates,
   lessonsForStudent,
   minutesToTime,
   matchesKoreanSearch,
@@ -14,7 +18,7 @@ import {
   validateLesson,
   validateState,
 } from './domain'
-import type { AppState, Lesson, LessonDraft, Student } from './types'
+import type { AppState, AttendanceRecord, Lesson, LessonDraft, Student } from './types'
 
 const student = (id: string, name = id): Student => ({
   id,
@@ -74,6 +78,67 @@ describe('표시 요일 설정', () => {
     expect(getScheduleColumns('hidden')).toHaveLength(5)
     expect(getScheduleColumns('combined').at(-1)?.weekdays).toEqual([6, 7])
     expect(getScheduleColumns('separate')).toHaveLength(7)
+  })
+})
+
+describe('출석 날짜와 월별 집계', () => {
+  it('현재 주에서 수업 요일에 맞는 날짜를 찾는다', () => {
+    expect(dateForWeekdayInCurrentWeek(1, new Date(2026, 9, 16))).toBe('2026-10-12')
+    expect(dateForWeekdayInCurrentWeek(5, new Date(2026, 9, 16))).toBe('2026-10-16')
+  })
+
+  it('한 달의 반복 수업 날짜를 계산한다', () => {
+    expect(lessonOccurrenceDates(lesson('monday', ['a'], 600, 660, 1), '2026-10')).toEqual([
+      '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26',
+    ])
+  })
+
+  it('학생별 출결 수와 출석률을 집계한다', () => {
+    const monday = lesson('monday', ['a'], 600, 660, 1)
+    const records: AttendanceRecord[] = [
+      {
+        id: attendanceRecordId(monday.id, '2026-10-05', 'a'),
+        lessonId: monday.id,
+        lessonLabel: monday.label,
+        teacherId: monday.teacherId,
+        studentId: 'a',
+        date: '2026-10-05',
+        status: 'present',
+        note: '',
+        updatedAt: '2026-10-05T10:00:00.000Z',
+      },
+      {
+        id: attendanceRecordId(monday.id, '2026-10-12', 'a'),
+        lessonId: monday.id,
+        lessonLabel: monday.label,
+        teacherId: monday.teacherId,
+        studentId: 'a',
+        date: '2026-10-12',
+        status: 'absent',
+        note: '',
+        updatedAt: '2026-10-12T10:00:00.000Z',
+      },
+    ]
+    const summary = buildMonthlyAttendanceSummaries(
+      [students[0]!], [monday], records, '2026-10', 'all', new Date(2026, 9, 31),
+    )[0]
+    expect(summary).toMatchObject({ scheduled: 4, present: 1, absent: 1, unchecked: 2, attendanceRate: 50 })
+  })
+
+  it('현재 달의 미래 수업은 미체크로 세지 않는다', () => {
+    const monday = lesson('monday', ['a'], 600, 660, 1)
+    const summary = buildMonthlyAttendanceSummaries(
+      [students[0]!], [monday], [], '2026-10', 'all', new Date(2026, 9, 16),
+    )[0]
+    expect(summary).toMatchObject({ scheduled: 2, unchecked: 2 })
+  })
+
+  it('수업을 만든 날짜보다 앞선 반복 일정은 출석 대상에서 제외한다', () => {
+    const monday = { ...lesson('monday', ['a'], 600, 660, 1), createdAt: '2026-10-10T09:00:00.000Z' }
+    const summary = buildMonthlyAttendanceSummaries(
+      [students[0]!], [monday], [], '2026-10', 'all', new Date(2026, 9, 31),
+    )[0]
+    expect(summary).toMatchObject({ scheduled: 3, unchecked: 3 })
   })
 })
 
@@ -213,6 +278,7 @@ describe('저장 데이터 검증', () => {
     schemaVersion: 1,
     students,
     lessons: [lesson('one', ['a'], 600, 660), lesson('group', ['b', 'c'], 700, 760)],
+    attendanceRecords: [],
   }
 
   it('정상 상태를 허용한다', () => {

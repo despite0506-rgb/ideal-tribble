@@ -25,6 +25,41 @@ describe('mergeCloudPayload', () => {
     expect(merged.appState.lessons.some((item) => item.id === 'remote-lesson')).toBe(true)
   })
 
+  it('keeps attendance checked concurrently on different devices', () => {
+    const base = payload()
+    const local = structuredClone(base)
+    const remote = structuredClone(base)
+    const lesson = base.appState.lessons[0]!
+    const firstStudentId = lesson.participants[0]!.studentId
+    const secondStudentId = base.appState.students.find((student) => student.id !== firstStudentId)!.id
+    local.appState.attendanceRecords.push({
+      id: `attendance:${lesson.id}:2026-10-16:${firstStudentId}`,
+      lessonId: lesson.id,
+      lessonLabel: lesson.label,
+      teacherId: lesson.teacherId,
+      studentId: firstStudentId,
+      date: '2026-10-16',
+      status: 'present',
+      note: '',
+      updatedAt: '2026-10-16T10:00:00.000Z',
+    })
+    remote.appState.attendanceRecords.push({
+      id: `attendance:${lesson.id}:2026-10-17:${secondStudentId}`,
+      lessonId: lesson.id,
+      lessonLabel: lesson.label,
+      teacherId: lesson.teacherId,
+      studentId: secondStudentId,
+      date: '2026-10-17',
+      status: 'late',
+      note: '10분 지각',
+      updatedAt: '2026-10-17T10:00:00.000Z',
+    })
+
+    const merged = mergeCloudPayload(base, local, remote)
+
+    expect(merged.appState.attendanceRecords).toHaveLength(2)
+  })
+
   it('combines independent changes to the same student', () => {
     const base = payload()
     const local = structuredClone(base)

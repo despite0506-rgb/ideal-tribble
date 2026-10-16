@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SCHEDULE_SETTINGS, parseScheduleSettings } from './storage'
+import { DEMO_STATE } from './demoData'
+import { DEFAULT_SCHEDULE_SETTINGS, parseAppState, parseScheduleSettings } from './storage'
+
+describe('저장 자료 호환성', () => {
+  it('출석 기능 추가 전 자료에는 빈 출석 기록을 채운다', () => {
+    const { attendanceRecords: _attendanceRecords, ...legacyState } = structuredClone(DEMO_STATE)
+    expect(parseAppState(legacyState)?.attendanceRecords).toEqual([])
+  })
+})
 
 describe('시간표 설정', () => {
   it('기존 저장 자료에는 차량 기능을 기본으로 유지한다', () => {

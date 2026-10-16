@@ -25,7 +25,7 @@ type CloudSyncOptions = {
   setScheduleSettings: Dispatch<SetStateAction<ScheduleSettings>>
 }
 
-const EMPTY_STATE: AppState = { schemaVersion: 1, students: [], lessons: [] }
+const EMPTY_STATE: AppState = { schemaVersion: 1, students: [], lessons: [], attendanceRecords: [] }
 
 function withCloudTimeout<T>(operation: PromiseLike<T>, timeoutMs = 12000): Promise<T> {
   return new Promise((resolve, reject) => {

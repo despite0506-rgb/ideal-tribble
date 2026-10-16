@@ -1888,6 +1888,199 @@ body.sidebar-resizing {
 .group-schedule-list small { color: var(--brand); font-size: 9px; }
 .group-schedule-list svg { color: var(--text-light); }
 
+.attendance-report-page {
+  padding-top: 18px;
+}
+
+.attendance-report-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 13px;
+}
+
+.month-selector {
+  display: flex;
+  min-height: 43px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.month-selector > button {
+  display: grid;
+  width: 36px;
+  height: 41px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.month-selector > button:hover { color: var(--brand); background: var(--brand-soft); }
+
+.month-selector label {
+  position: relative;
+  display: grid;
+  min-width: 126px;
+  height: 41px;
+  place-items: center;
+  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.month-selector label > span {
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.month-selector input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.attendance-teacher-filter select {
+  min-height: 43px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: #fff;
+  font-size: 11px;
+}
+
+.attendance-search {
+  min-width: 180px;
+  flex: 1;
+}
+
+.attendance-download {
+  min-height: 43px;
+  white-space: nowrap;
+}
+
+.attendance-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 13px;
+}
+
+.attendance-summary-cards article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 3px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.attendance-summary-cards article > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.attendance-summary-cards article > strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.attendance-summary-cards article > small { color: var(--text-light); font-size: 9px; }
+.attendance-summary-cards article.needs-check { border-color: #e9cf9c; background: #fffaf0; }
+.attendance-summary-cards article.needs-check > strong { color: var(--amber); }
+
+.attendance-report-table-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.attendance-report-table-card > header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.attendance-report-table-card > header > div { display: flex; align-items: center; gap: 8px; color: var(--brand); }
+.attendance-report-table-card h2 { margin: 0; color: var(--text); font-size: 14px; }
+.attendance-report-table-card > header > span { color: var(--text-light); font-size: 9px; }
+.attendance-table-scroll { overflow-x: auto; }
+
+.attendance-report-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.attendance-report-table th,
+.attendance-report-table td {
+  height: 54px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf1ef;
+  text-align: center;
+}
+
+.attendance-report-table th {
+  height: 38px;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.attendance-report-table th:first-child,
+.attendance-report-table td:first-child { text-align: left; }
+.attendance-report-table tbody tr:last-child td { border-bottom: 0; }
+
+.attendance-report-student { display: flex; min-width: 145px; align-items: center; gap: 8px; }
+.attendance-report-student > span { display: grid; gap: 2px; }
+.attendance-report-student strong { font-size: 11px; }
+.attendance-report-student small { color: var(--text-muted); font-size: 8px; }
+.attendance-report-table td > strong { font-size: 13px; }
+
+.attendance-count {
+  display: inline-grid;
+  min-width: 27px;
+  height: 25px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.attendance-count.present { color: var(--success); background: #eaf7ef; }
+.attendance-count.late { color: #9a6400; background: #fff5dc; }
+.attendance-count.absent { color: var(--danger); background: var(--danger-soft); }
+.attendance-count.excused { color: var(--blue); background: var(--blue-soft); }
+.attendance-count.unchecked.active { color: #8a641e; background: #fff2d6; }
+
+.attendance-rate { display: flex; min-width: 85px; align-items: center; justify-content: flex-end; gap: 8px; }
+.attendance-rate > strong { width: 34px; font-size: 10px; text-align: right; }
+.attendance-rate > span { width: 42px; height: 5px; overflow: hidden; border-radius: 99px; background: #e6ece9; }
+.attendance-rate i { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+.attendance-report-empty { padding: 34px !important; color: var(--text-muted); font-size: 11px; text-align: center !important; }
+
 .students-toolbar {
   display: flex;
   align-items: center;
@@ -3126,6 +3319,158 @@ button.selected-student-chip {
   box-shadow: 0 0 0 3px rgba(20, 108, 99, 0.1);
 }
 
+.attendance-modal-body { gap: 13px; }
+
+.attendance-lesson-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-subtle);
+}
+
+.attendance-lesson-summary > div:first-child {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 3px 8px;
+}
+
+.attendance-lesson-summary > div:first-child > span { color: var(--brand); font-size: 10px; font-weight: 800; }
+.attendance-lesson-summary > div:first-child > strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.attendance-lesson-summary > div:first-child > small { grid-column: 1 / -1; color: var(--text-muted); font-size: 9px; }
+
+.attendance-date-control {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.attendance-date-control > button {
+  display: grid;
+  width: 34px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.attendance-date-control > button:hover { color: var(--brand); background: var(--brand-soft); }
+
+.attendance-date-control label {
+  position: relative;
+  display: grid;
+  min-width: 126px;
+  height: 38px;
+  place-items: center;
+  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.attendance-date-control label > span { font-size: 10px; font-weight: 750; }
+.attendance-date-control input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.attendance-check-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.attendance-check-toolbar > span { color: var(--text-muted); font-size: 10px; }
+.attendance-check-toolbar > span strong { color: var(--brand); font-size: 13px; }
+.attendance-check-toolbar > div { display: flex; gap: 6px; }
+
+.attendance-check-toolbar button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: #fff;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.attendance-check-toolbar button.all-present { border-color: #a8d2c8; color: var(--brand); background: var(--brand-soft); }
+.attendance-student-list { display: grid; gap: 7px; }
+
+.attendance-student-row {
+  display: grid;
+  grid-template-columns: minmax(145px, .8fr) minmax(260px, 1.4fr) minmax(120px, .8fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.attendance-student-name { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.attendance-student-name > span { display: grid; min-width: 0; gap: 2px; }
+.attendance-student-name strong { font-size: 11px; }
+.attendance-student-name small { overflow: hidden; color: var(--text-muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.attendance-status-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+
+.attendance-status-options button {
+  display: flex;
+  min-height: 35px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.attendance-status-options button > span {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #a7b3af;
+  font-size: 7px;
+}
+
+.attendance-status-options button.present.active { border-color: #9fcab0; color: var(--success); background: #eaf7ef; }
+.attendance-status-options button.present.active > span { background: var(--success); }
+.attendance-status-options button.late.active { border-color: #e5c87d; color: #8b5a00; background: #fff5dc; }
+.attendance-status-options button.late.active > span { background: #b77900; }
+.attendance-status-options button.absent.active { border-color: #e2aaaa; color: var(--danger); background: var(--danger-soft); }
+.attendance-status-options button.absent.active > span { background: var(--danger); }
+.attendance-status-options button.excused.active { border-color: #afc7ee; color: var(--blue); background: var(--blue-soft); }
+.attendance-status-options button.excused.active > span { background: var(--blue); }
+
+.attendance-note input {
+  width: 100%;
+  min-height: 35px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--text);
+  background: #fff;
+  font-size: 9px;
+}
+
+.attendance-note input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(20, 108, 99, .1); }
+.attendance-saved-note { margin: 0; color: var(--text-light); font-size: 9px; text-align: right; }
+
 .group-weekday-time-row small {
   color: var(--brand);
   font-size: 9px;
@@ -3345,9 +3690,9 @@ button.selected-student-chip {
     left: 0;
     display: grid;
     height: calc(66px + env(safe-area-inset-bottom));
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     align-items: start;
-    padding: 6px 9% env(safe-area-inset-bottom);
+    padding: 6px 3% env(safe-area-inset-bottom);
     border-top: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(16px);
@@ -3458,6 +3803,20 @@ button.selected-student-chip {
   .mobile-schedule .empty-day { min-height: 220px; }
   .lesson-list-card { min-height: 113px; }
   .student-card-grid { grid-template-columns: 1fr; }
+  .attendance-report-toolbar { flex-wrap: wrap; }
+  .month-selector,
+  .attendance-teacher-filter { flex: 1; }
+  .attendance-teacher-filter select { width: 100%; }
+  .attendance-search { order: 3; flex: 1 1 190px; }
+  .attendance-download { order: 4; }
+  .attendance-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-report-table-card > header { align-items: flex-start; flex-direction: column; }
+  .attendance-lesson-summary { align-items: stretch; flex-direction: column; }
+  .attendance-date-control { align-self: stretch; }
+  .attendance-date-control label { flex: 1; }
+  .attendance-check-toolbar { align-items: flex-start; flex-direction: column; }
+  .attendance-student-row { grid-template-columns: 1fr; }
+  .attendance-status-options button { min-height: 39px; }
   .students-page { padding-top: 14px; }
   .groups-page { padding-top: 14px; }
   .group-card-grid { grid-template-columns: 1fr; }
@@ -3526,6 +3885,7 @@ button.selected-student-chip {
   .student-card > footer { align-items: stretch; }
   .student-card footer .button { flex: 1; }
   .mobile-bottom-nav { padding-right: 3%; padding-left: 3%; }
+  .attendance-download { flex: 1; justify-content: center; }
   .modal-footer .button.secondary { display: none; }
   .modal-footer .button.primary { flex: 1; }
   .lesson-student-tools { grid-template-columns: 1fr; }
