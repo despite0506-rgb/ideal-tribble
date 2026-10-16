@@ -570,10 +570,15 @@ body.sidebar-resizing {
 
 .teacher-switcher-label {
   display: flex;
-  min-width: 180px;
   align-items: center;
   gap: 8px;
   color: var(--brand);
+}
+
+.teacher-switcher-heading {
+  display: grid;
+  min-width: 180px;
+  gap: 6px;
 }
 
 .teacher-switcher-label > span {
@@ -583,6 +588,28 @@ body.sidebar-resizing {
 
 .teacher-switcher-label strong { color: var(--text); font-size: 11px; }
 .teacher-switcher-label small { color: var(--text-light); font-size: 8px; }
+
+.teacher-name-settings-button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 25px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.teacher-name-settings-button:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
 
 .teacher-switcher-buttons {
   display: grid;
@@ -2482,6 +2509,32 @@ body.sidebar-resizing {
   gap: 12px;
 }
 
+.name-settings-teachers {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-subtle);
+}
+
+.name-settings-teachers legend {
+  padding: 0 4px;
+  color: #43534e;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.name-settings-teachers > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.name-settings-teachers .field > span {
+  font-size: 9px;
+}
+
 .color-field,
 .segmented-field,
 .weekday-picker,
@@ -3263,6 +3316,7 @@ body.sidebar-resizing {
   .top-add { min-width: 42px; width: 42px; padding: 0; }
   .top-add:not(:focus) { font-size: 0; gap: 0; }
   .teacher-switcher { align-items: stretch; flex-direction: column; gap: 7px; margin-top: 10px; padding: 8px; }
+  .teacher-switcher-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; }
   .teacher-switcher-label { min-width: 0; }
   .teacher-switcher-label > span { display: flex; align-items: baseline; gap: 7px; }
   .teacher-switcher-buttons button { min-height: 43px; justify-content: center; flex-direction: column; gap: 2px; padding: 0 5px; }
@@ -3367,6 +3421,7 @@ body.sidebar-resizing {
   .modal-body { gap: 15px; padding: 16px; }
   .modal-footer { padding: 11px 16px calc(11px + env(safe-area-inset-bottom)); }
   .field-row { grid-template-columns: 1fr; }
+  .name-settings-teachers > div { grid-template-columns: 1fr; }
   .time-fields { grid-template-columns: 1fr 1fr; }
   .time-divider { display: none; }
   .participant-ride-row {

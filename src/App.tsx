@@ -563,6 +563,78 @@ function ModalFrame({ title, eyebrow, onClose, children, wide = false }: { title
   )
 }
 
+function NameSettingsModal({
+  settings,
+  onClose,
+  onSave,
+}: {
+  settings: ScheduleSettings
+  onClose: () => void
+  onSave: (names: Pick<ScheduleSettings, 'academyName' | 'teacherNames'>) => void
+}) {
+  const [academyName, setAcademyName] = useState(settings.academyName)
+  const [teacherNames, setTeacherNames] = useState<[string, string, string]>(
+    () => [...settings.teacherNames] as [string, string, string],
+  )
+
+  const updateTeacher = (index: 0 | 1 | 2, name: string) => {
+    setTeacherNames((current) => {
+      const next = [...current] as [string, string, string]
+      next[index] = name
+      return next
+    })
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    onSave({
+      academyName: academyName.trim() || '우리 학원',
+      teacherNames: teacherNames.map((name, index) => name.trim() || `선생님 ${index + 1}`) as [string, string, string],
+    })
+  }
+
+  return (
+    <ModalFrame title="학원·선생님 이름" eyebrow="기본 정보 설정" onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="modal-body name-settings-modal">
+          <label className="field">
+            <span>학원 이름</span>
+            <input
+              autoFocus
+              value={academyName}
+              maxLength={24}
+              onChange={(event) => setAcademyName(event.target.value)}
+              placeholder="예: 우리 학원"
+            />
+            <small>왼쪽 메뉴와 브라우저 제목에 표시됩니다.</small>
+          </label>
+          <fieldset className="name-settings-teachers">
+            <legend>선생님 이름</legend>
+            <div>
+              {TEACHERS.map((teacher) => (
+                <label className="field" key={teacher.id}>
+                  <span>{teacher.index + 1}번 시간표</span>
+                  <input
+                    value={teacherNames[teacher.index]}
+                    maxLength={12}
+                    onChange={(event) => updateTeacher(teacher.index, event.target.value)}
+                    placeholder={`선생님 ${teacher.index + 1}`}
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+        <footer className="modal-footer">
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onClose}>취소</button>
+          <button type="submit" className="button primary">이름 저장</button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function StudentModal({
   student,
   onClose,
@@ -1650,6 +1722,7 @@ export default function App() {
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
   const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
+  const [nameSettingsOpen, setNameSettingsOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const cloud = useCloudSync({ appState, setAppState, scheduleSettings, setScheduleSettings })
 
@@ -2078,9 +2151,14 @@ export default function App() {
         )}
 
         <section className="teacher-switcher" aria-label="선생님 시간표 선택">
-          <div className="teacher-switcher-label">
-            <CalendarDays size={16} />
-            <span><strong>선생님 시간표</strong><small>학생 목록은 3명이 함께 사용</small></span>
+          <div className="teacher-switcher-heading">
+            <div className="teacher-switcher-label">
+              <CalendarDays size={16} />
+              <span><strong>선생님 시간표</strong><small>학생 목록은 3명이 함께 사용</small></span>
+            </div>
+            <button type="button" className="teacher-name-settings-button" onClick={() => setNameSettingsOpen(true)}>
+              <Settings2 size={13} /> 이름 설정
+            </button>
           </div>
           <div className="teacher-switcher-buttons">
             {TEACHERS.map((teacher) => {
@@ -2373,6 +2451,17 @@ export default function App() {
           students={appState.students}
           onClose={() => setSchoolColorModalOpen(false)}
           onSave={saveSchoolColors}
+        />
+      )}
+      {nameSettingsOpen && (
+        <NameSettingsModal
+          settings={scheduleSettings}
+          onClose={() => setNameSettingsOpen(false)}
+          onSave={(names) => {
+            setScheduleSettings((current) => ({ ...current, ...names }))
+            setNameSettingsOpen(false)
+            setNotice('학원과 선생님 이름을 저장했습니다.')
+          }}
         />
       )}
       {activeGroupSeries && (
