@@ -12,6 +12,7 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   startMinute: 13 * 60,
   endMinute: 22 * 60,
   weekendMode: 'hidden',
+  transportEnabled: true,
 }
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
@@ -96,6 +97,7 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     startMinute: Number(settings.startMinute),
     endMinute: Number(settings.endMinute),
     weekendMode: settings.weekendMode as ScheduleSettings['weekendMode'],
+    transportEnabled: typeof settings.transportEnabled === 'boolean' ? settings.transportEnabled : true,
   }
 }
 

@@ -61,6 +61,7 @@ export type ScheduleSettings = {
   startMinute: number
   endMinute: number
   weekendMode: WeekendMode
+  transportEnabled: boolean
 }
 
 export type LessonDraft = Omit<Lesson, 'id' | 'createdAt'>

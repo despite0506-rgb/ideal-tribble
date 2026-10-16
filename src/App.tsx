@@ -192,10 +192,12 @@ function LessonRideSummary({ lesson }: { lesson: Lesson }) {
 function LessonCardContent({
   lesson,
   students,
+  transportEnabled,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
+  transportEnabled: boolean
   dense?: boolean
 }) {
   const participants = lesson.participants
@@ -209,7 +211,7 @@ function LessonCardContent({
           {minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)}
         </span>
         <span className="lesson-card-badges">
-          <LessonRideSummary lesson={lesson} />
+          {transportEnabled && <LessonRideSummary lesson={lesson} />}
           {lesson.kind === 'group' && <span className="kind-badge">{lesson.participants.length}인</span>}
         </span>
       </div>
@@ -220,23 +222,26 @@ function LessonCardContent({
         </span>
         <span>{participants.map(({ student }) => student.name).join(' · ')}</span>
       </div>
-      <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
-        {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
-          <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
-            {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
-            <RidePills transport={participant.transport} compact />
-          </span>
-        ))}
-      </div>
+      {transportEnabled && (
+        <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
+          {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
+            <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
+              {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
+              <RidePills transport={participant.transport} compact />
+            </span>
+          ))}
+        </div>
+      )}
     </>
   )
 }
 
-function lessonAriaLabel(lesson: Lesson, students: Student[]): string {
+function lessonAriaLabel(lesson: Lesson, students: Student[], transportEnabled: boolean): string {
   const day = WEEKDAYS.find((item) => item.value === lesson.weekday)?.long ?? ''
   const people = lesson.participants.map((participant) => {
     const student = studentById(students, participant.studentId)
-    return `${student?.name ?? '학생'}, ${transportText(participant.transport)}`
+    const name = student?.name ?? '학생'
+    return transportEnabled ? `${name}, ${transportText(participant.transport)}` : name
   }).join(', ')
   return `${day} ${minutesToTime(lesson.startMinute)}부터 ${minutesToTime(lesson.endMinute)}, ${lesson.label}, ${lesson.kind === 'group' ? `${lesson.participants.length}인 그룹 수업` : '개인 수업'}, ${people}`
 }
@@ -330,9 +335,9 @@ function Timeline({
                       style={cardStyle}
                       onClick={() => onOpenLesson(lesson.id)}
                       key={lesson.id}
-                      aria-label={lessonAriaLabel(lesson, students)}
+                      aria-label={lessonAriaLabel(lesson, students, settings.transportEnabled)}
                     >
-                      <LessonCardContent lesson={lesson} students={students} dense={(lesson.endMinute - lesson.startMinute) < 45} />
+                      <LessonCardContent lesson={lesson} students={students} transportEnabled={settings.transportEnabled} dense={(lesson.endMinute - lesson.startMinute) < 45} />
                     </button>
                   )
                 })}
@@ -352,6 +357,7 @@ function LessonList({
   onOpenLesson,
   selectedDay,
   onSelectDay,
+  transportEnabled,
   mobileOnly = false,
 }: {
   lessons: Lesson[]
@@ -360,6 +366,7 @@ function LessonList({
   onOpenLesson: (lessonId: string) => void
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
+  transportEnabled: boolean
   mobileOnly?: boolean
 }) {
   const columns = getScheduleColumns(weekendMode)
@@ -416,10 +423,10 @@ function LessonList({
                     style={cardStyle}
                     onClick={() => onOpenLesson(lesson.id)}
                     key={lesson.id}
-                    aria-label={lessonAriaLabel(lesson, students)}
+                    aria-label={lessonAriaLabel(lesson, students, transportEnabled)}
                   >
                     {column.weekdays.length > 1 && <span className="combined-day-label">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.long}</span>}
-                    <LessonCardContent lesson={lesson} students={students} />
+                    <LessonCardContent lesson={lesson} students={students} transportEnabled={transportEnabled} />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
                   </button>
                   )
@@ -630,11 +637,13 @@ function NameSettingsModal({
 
 function StudentModal({
   student,
+  transportEnabled,
   onClose,
   onSave,
   onDelete,
 }: {
   student?: Student
+  transportEnabled: boolean
   onClose: () => void
   onSave: (student: Student) => void
   onDelete: (studentId: string) => void
@@ -707,12 +716,14 @@ function StudentModal({
               ))}
             </div>
           </fieldset>
-          <fieldset className="transport-box">
-            <legend><Bus size={16} /> 기본 차량 설정</legend>
-            <p>수업을 만들 때 기본값으로 사용되며, 수업마다 바꿀 수 있습니다.</p>
-            <Toggle label="등원차량 이용" checked={transport.arrivalRide} onChange={(arrivalRide) => setTransport((current) => ({ ...current, arrivalRide }))} />
-            <Toggle label="하원차량 이용" checked={transport.departureRide} onChange={(departureRide) => setTransport((current) => ({ ...current, departureRide }))} />
-          </fieldset>
+          {transportEnabled && (
+            <fieldset className="transport-box">
+              <legend><Bus size={16} /> 기본 차량 설정</legend>
+              <p>수업을 만들 때 기본값으로 사용되며, 수업마다 바꿀 수 있습니다.</p>
+              <Toggle label="등원차량 이용" checked={transport.arrivalRide} onChange={(arrivalRide) => setTransport((current) => ({ ...current, arrivalRide }))} />
+              <Toggle label="하원차량 이용" checked={transport.departureRide} onChange={(departureRide) => setTransport((current) => ({ ...current, departureRide }))} />
+            </fieldset>
+          )}
           <label className="field">
             <span>Notion 학생 페이지 <small>선택</small></span>
             <div className="input-with-icon"><Link2 size={16} aria-hidden="true" /><input type="url" value={notionUrl} onChange={(event) => setNotionUrl(event.target.value)} placeholder="https://www.notion.so/..." /></div>
@@ -736,10 +747,12 @@ function StudentModal({
 
 function BulkStudentModal({
   existingStudents,
+  transportEnabled,
   onClose,
   onSave,
 }: {
   existingStudents: Student[]
+  transportEnabled: boolean
   onClose: () => void
   onSave: (students: Student[]) => void
 }) {
@@ -824,7 +837,7 @@ function BulkStudentModal({
             ))}
           </div>
           <button type="button" className="bulk-add-row" onClick={() => setRows((current) => [...current, createBulkStudentRow()])}><Plus size={15} /> 입력 행 추가</button>
-          <p className="bulk-student-help">차량 이용, 학생 색상, Notion 연결은 등록 후 학생 정보 수정에서 설정할 수 있습니다.</p>
+          <p className="bulk-student-help">{transportEnabled ? '차량 이용, 학생 색상, Notion 연결' : '학생 색상과 Notion 연결'}은 등록 후 학생 정보 수정에서 설정할 수 있습니다.</p>
         </div>
         <footer className="modal-footer">
           <span className="footer-spacer" />
@@ -1020,6 +1033,7 @@ function LessonModal({
   presetWeekday,
   presetKind,
   teacherId,
+  transportEnabled,
   onClose,
   onSave,
   onDelete,
@@ -1031,6 +1045,7 @@ function LessonModal({
   presetWeekday?: Weekday
   presetKind?: Lesson['kind']
   teacherId: TeacherId
+  transportEnabled: boolean
   onClose: () => void
   onSave: (lessons: Lesson[]) => void
   onDelete: (lessonId: string) => void
@@ -1118,10 +1133,13 @@ function LessonModal({
     const participantsForWeekday = (weekday: Weekday) => {
       const lessonTime = weekdayTimes[weekday] ?? { start, end }
       return participantIds.map((studentId) => {
-        const transport = rideFor(studentId, kind === 'group' ? weekday : undefined)
+        const transport = transportEnabled
+          ? rideFor(studentId, kind === 'group' ? weekday : undefined)
+          : lesson?.participants.find((participant) => participant.studentId === studentId)?.transport
+            ?? { arrivalRide: false, departureRide: false }
         return {
           studentId,
-          transport: kind === 'group' ? {
+          transport: transportEnabled && kind === 'group' ? {
             ...transport,
             arrivalMinute: transport.arrivalRide
               ? transport.arrivalMinute ?? timeToMinutes(lessonTime.start)
@@ -1237,7 +1255,7 @@ function LessonModal({
               {selectedWeekdays.length === 0 && <p>요일을 선택하면 시간 설정이 나타납니다.</p>}
             </div>
           </fieldset>
-          {participantIds.length > 0 && (
+          {transportEnabled && participantIds.length > 0 && (
             <fieldset className="participant-rides">
               <legend><Bus size={16} /> 학생별 차량 이용</legend>
               <p>{kind === 'group' ? '요일마다 학생별 차량 이용과 실제 등원·하원 시간을 설정하세요.' : '이 수업에 적용할 등원·하원 차량을 각각 설정하세요.'}</p>
@@ -1323,12 +1341,14 @@ function GroupMembersModal({
   series,
   students,
   lessons,
+  transportEnabled,
   onClose,
   onSave,
 }: {
   series: GroupLessonSeries
   students: Student[]
   lessons: Lesson[]
+  transportEnabled: boolean
   onClose: () => void
   onSave: (studentIds: string[]) => void
 }) {
@@ -1350,7 +1370,7 @@ function GroupMembersModal({
       const participants = participantIds.map((studentId) => ({
         studentId,
         transport: lesson.participants.find((participant) => participant.studentId === studentId)?.transport
-          ?? studentById(students, studentId)?.defaultTransport
+          ?? (transportEnabled ? studentById(students, studentId)?.defaultTransport : undefined)
           ?? { arrivalRide: false, departureRide: false },
       }))
       return validateLesson({ ...lesson, participants }, students, lessons, lesson.id)
@@ -1389,7 +1409,7 @@ function GroupMembersModal({
             multiple
             onChange={(studentIds) => { setErrors([]); setParticipantIds(studentIds) }}
           />
-          <p className="group-member-help">새로 추가한 학생의 차량 설정은 학생 정보에 저장된 기본값으로 적용됩니다. 각 요일의 차량 설정은 해당 수업을 열어 변경할 수 있어요.</p>
+          {transportEnabled && <p className="group-member-help">새로 추가한 학생의 차량 설정은 학생 정보에 저장된 기본값으로 적용됩니다. 각 요일의 차량 설정은 해당 수업을 열어 변경할 수 있어요.</p>}
         </div>
         <footer className="modal-footer">
           <span className="footer-spacer" />
@@ -1475,6 +1495,7 @@ function StudentDetail({
   lessons,
   allStudents,
   teacherNames,
+  transportEnabled,
   onBack,
   onEdit,
   onAddLesson,
@@ -1487,6 +1508,7 @@ function StudentDetail({
   lessons: Lesson[]
   allStudents: Student[]
   teacherNames: ScheduleSettings['teacherNames']
+  transportEnabled: boolean
   onBack: () => void
   onEdit: () => void
   onAddLesson: () => void
@@ -1552,11 +1574,11 @@ function StudentDetail({
         </div>
       </div>
 
-      <div className="student-detail-stats">
+      <div className={`student-detail-stats${transportEnabled ? '' : ' without-transport'}`}>
         <div><strong>{lessons.length}</strong><span>주간 수업</span></div>
         <div><strong>{groupLessons.length}</strong><span>그룹 수업</span></div>
         <div><strong>{feedbacks.length}</strong><span>피드백 기록</span></div>
-        <div><RidePills transport={student.defaultTransport} /></div>
+        {transportEnabled && <div><RidePills transport={student.defaultTransport} /></div>}
       </div>
 
       <div className="student-detail-layout">
@@ -1574,11 +1596,11 @@ function StudentDetail({
                   .filter(Boolean)
                   .join(' · ')
                 return (
-                  <button type="button" key={lesson.id} onClick={() => onOpenLesson(lesson.id)}>
+                  <button type="button" className={transportEnabled ? '' : 'without-transport'} key={lesson.id} onClick={() => onOpenLesson(lesson.id)}>
                     <span className="student-lesson-day">{WEEKDAYS.find((day) => day.value === lesson.weekday)?.short}</span>
                     <span className="student-lesson-main"><strong>{lesson.label}</strong><small>{teacherNames[teacherIndex]} · {minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)} · {people}</small></span>
                     {lesson.kind === 'group' && <span className="student-group-badge">그룹 {lesson.participants.length}인</span>}
-                    {participant && <RidePills transport={participant.transport} compact />}
+                    {transportEnabled && participant && <RidePills transport={participant.transport} compact />}
                     <Pencil size={14} aria-hidden="true" />
                   </button>
                 )
@@ -1919,7 +1941,7 @@ export default function App() {
           participants: studentIds.map((studentId) => ({
             studentId,
             transport: lesson.participants.find((participant) => participant.studentId === studentId)?.transport
-              ?? studentById(current.students, studentId)?.defaultTransport
+              ?? (scheduleSettings.transportEnabled ? studentById(current.students, studentId)?.defaultTransport : undefined)
               ?? { arrivalRide: false, departureRide: false },
           })),
         }
@@ -2162,7 +2184,7 @@ export default function App() {
                 ? `${activeTeacherName} 그룹 수업`
                 : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
             <p>{view === 'schedule'
-              ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.'
+              ? (scheduleSettings.transportEnabled ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : '매주 반복되는 수업을 한눈에 확인하세요.')
               : view === 'groups'
                 ? '그룹 일정과 참여 인원을 한곳에서 관리하세요.'
                 : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
@@ -2245,14 +2267,14 @@ export default function App() {
                   </p>
                 </div>
                 <div className="toolbar-actions">
-                  {selectedStudent && <RidePills transport={selectedStudent.defaultTransport} />}
+                  {scheduleSettings.transportEnabled && selectedStudent && <RidePills transport={selectedStudent.defaultTransport} />}
                   <button
                     type="button"
                     className={`schedule-settings-button${settingsOpen ? ' active' : ''}`}
                     onClick={() => setSettingsOpen((open) => !open)}
                     aria-expanded={settingsOpen}
                   >
-                    <Settings2 size={15} /> <span>표시 설정</span>
+                    <Settings2 size={15} /> <span>시간표 설정</span>
                   </button>
                   <button
                     type="button"
@@ -2271,7 +2293,7 @@ export default function App() {
                 </div>
               </header>
               {settingsOpen && (
-                <div className="schedule-settings" aria-label="시간표 표시 설정">
+                <div className="schedule-settings" aria-label="시간표 설정">
                   <label className="academy-name-setting">
                     <span className="settings-label">학원 이름</span>
                     <input
@@ -2346,6 +2368,17 @@ export default function App() {
                       ))}
                     </div>
                   </fieldset>
+                  <div className="transport-feature-setting">
+                    <Bus size={15} aria-hidden="true" />
+                    <Toggle
+                      label="등·하원 차량 기능"
+                      checked={scheduleSettings.transportEnabled}
+                      onChange={(transportEnabled) => {
+                        setScheduleSettings((current) => ({ ...current, transportEnabled }))
+                        setNotice(transportEnabled ? '차량 기능을 켰습니다.' : '차량 기능을 숨겼습니다. 기존 차량 정보는 보관됩니다.')
+                      }}
+                    />
+                  </div>
                   {outsideDisplayCount > 0 && (
                     <p className="hidden-lessons-note">현재 설정에서 {outsideDisplayCount}개 수업이 시간표 밖에 있습니다. 목록 보기에서는 모두 확인할 수 있어요.</p>
                   )}
@@ -2364,18 +2397,18 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} onAddAt={(weekday) => openNewLesson(weekday)} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} transportEnabled={scheduleSettings.transportEnabled} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={(lessonId) => setLessonModal({ open: true, lessonId })} transportEnabled={scheduleSettings.transportEnabled} />
                 </>
               )}
             </section>
-            <section className="stats-grid stats-grid-bottom" aria-label="오늘의 요약">
+            <section className={`stats-grid stats-grid-bottom${scheduleSettings.transportEnabled ? '' : ' without-transport'}`} aria-label="오늘의 요약">
               <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
               <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
               <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={teacherLessons.filter((lesson) => lesson.kind === 'group').length} hint="선택 시간표" tone="purple" />
-              <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />
+              {scheduleSettings.transportEnabled && <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />}
             </section>
           </>
         ) : view === 'groups' ? (
@@ -2401,7 +2434,6 @@ export default function App() {
               <div className="student-card-grid">
                 {pageStudents.map((student) => {
                   const studentLessons = lessonsForStudent(appState.lessons, student.id)
-                  const nextLesson = studentLessons[0]
                   return (
                     <article className="student-card" key={student.id}>
                       <header>
@@ -2409,17 +2441,9 @@ export default function App() {
                         <div><h2>{student.name}</h2><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'}</p></div>
                         <button type="button" className="icon-button" onClick={() => setStudentModal({ open: true, studentId: student.id })} aria-label={`${student.name} 정보 수정`}><Pencil size={17} /></button>
                       </header>
-                      <div className="student-transport">
-                        <span>기본 차량</span>
-                        <RidePills transport={student.defaultTransport} />
-                      </div>
                       <div className="student-card-stats">
                         <div><strong>{studentLessons.length}</strong><span>주간 수업</span></div>
                         <div><strong>{studentLessons.filter((lesson) => lesson.kind === 'group').length}</strong><span>그룹 수업</span></div>
-                      </div>
-                      <div className="next-lesson">
-                        <span>첫 수업</span>
-                        {nextLesson ? <strong>{WEEKDAYS.find((day) => day.value === nextLesson.weekday)?.short} {minutesToTime(nextLesson.startMinute)} · {nextLesson.label}</strong> : <strong>등록된 수업 없음</strong>}
                       </div>
                       <footer>
                         <button type="button" className="button secondary" onClick={() => openNewLesson(undefined, student.id)}><Plus size={15} /> 수업 추가</button>
@@ -2437,6 +2461,7 @@ export default function App() {
             lessons={lessonsForStudent(appState.lessons, detailStudent.id)}
             allStudents={appState.students}
             teacherNames={scheduleSettings.teacherNames}
+            transportEnabled={scheduleSettings.transportEnabled}
             onBack={() => setView('students')}
             onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
             onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
@@ -2472,6 +2497,7 @@ export default function App() {
           presetWeekday={lessonModal.presetWeekday}
           presetKind={lessonModal.presetKind}
           teacherId={activeTeacherId}
+          transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setLessonModal({ open: false })}
           onSave={saveLessons}
           onDelete={deleteLesson}
@@ -2481,6 +2507,7 @@ export default function App() {
         <StudentModal
           key={studentModal.studentId ?? 'new'}
           student={activeEditStudent}
+          transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setStudentModal({ open: false })}
           onSave={saveStudent}
           onDelete={deleteStudent}
@@ -2489,6 +2516,7 @@ export default function App() {
       {bulkStudentModalOpen && (
         <BulkStudentModal
           existingStudents={appState.students}
+          transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setBulkStudentModalOpen(false)}
           onSave={saveBulkStudents}
         />
@@ -2517,6 +2545,7 @@ export default function App() {
           series={activeGroupSeries}
           students={appState.students}
           lessons={appState.lessons}
+          transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setGroupMembersModalId(null)}
           onSave={(studentIds) => saveGroupMembers(activeGroupSeries.id, studentIds)}
         />
