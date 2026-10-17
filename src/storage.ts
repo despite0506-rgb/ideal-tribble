@@ -37,7 +37,15 @@ export const normalizeState = (state: AppState): AppState => ({
   })),
   attendanceRecords: Array.isArray(state.attendanceRecords) ? state.attendanceRecords : [],
   attendanceSessions: Array.isArray(state.attendanceSessions) ? state.attendanceSessions : [],
-  paymentRecords: Array.isArray(state.paymentRecords) ? state.paymentRecords : [],
+  paymentRecords: Array.isArray(state.paymentRecords) ? state.paymentRecords.map((record) => ({
+    id: record.id,
+    studentId: record.studentId,
+    month: record.month,
+    status: record.status,
+    amount: record.amount,
+    dueDate: record.dueDate,
+    updatedAt: record.updatedAt,
+  })) : [],
 })
 
 export function parseAppState(value: unknown): AppState | null {

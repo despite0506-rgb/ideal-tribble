@@ -384,11 +384,9 @@ describe('저장 데이터 검증', () => {
       status: 'paid' as const,
       amount: 320000,
       dueDate: '2026-10-10',
-      paidDate: '2026-10-09',
       updatedAt: '2026-10-09T10:00:00.000Z',
     }]
     expect(validateState({ ...validState, paymentRecords })).toBe(true)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], amount: -1 }] })).toBe(false)
-    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], paidDate: '' }] })).toBe(false)
   })
 })

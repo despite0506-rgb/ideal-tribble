@@ -78,7 +78,6 @@ export type PaymentRecord = {
   status: PaymentStatus
   amount: number
   dueDate: string
-  paidDate: string
   updatedAt: string
 }
 

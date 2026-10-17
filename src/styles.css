@@ -1568,8 +1568,8 @@ body.sidebar-resizing {
   font-size: 10px;
   font-weight: 720;
   line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .lesson-people {
@@ -1620,10 +1620,19 @@ body.sidebar-resizing {
   font-size: 7px;
 }
 
-.lesson-card[style*="height: 34"] .lesson-title,
 .lesson-card[style*="height: 34"] .lesson-people,
 .lesson-card[style*="height: 34"] .lesson-rides {
   display: none;
+}
+
+.lesson-card[style*="height: 34"] {
+  padding: 3px 5px;
+}
+
+.lesson-card[style*="height: 34"] .lesson-title {
+  margin-top: 1px;
+  font-size: 8px;
+  line-height: 1.05;
 }
 
 .mobile-schedule {
@@ -2138,7 +2147,7 @@ body.sidebar-resizing {
 .payment-table-card h2 { margin: 0; color: var(--text); font-size: 14px; }
 .payment-table-card > header > span { color: var(--text-light); font-size: 9px; }
 .payment-table-scroll { overflow-x: auto; }
-.payment-table { width: 100%; min-width: 940px; border-collapse: collapse; }
+.payment-table { width: 100%; min-width: 790px; border-collapse: collapse; }
 .payment-table th,
 .payment-table td { height: 61px; padding: 8px 10px; border-bottom: 1px solid #edf1ef; text-align: center; }
 .payment-table th { height: 38px; color: var(--text-muted); background: var(--surface-subtle); font-size: 9px; font-weight: 750; }
@@ -2205,6 +2214,34 @@ body.sidebar-resizing {
   min-height: 39px;
   padding: 0 11px;
   font-size: 10px;
+}
+
+.student-sort-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.student-sort-control button {
+  min-height: 31px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.student-sort-control button.active {
+  color: var(--brand);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .student-card-grid {
@@ -4140,7 +4177,9 @@ button.selected-student-chip {
   .academy-name-setting { width: 100%; }
   .academy-name-setting input { width: 100%; }
   .teacher-name-settings { width: 100%; min-width: 0; }
-  .students-toolbar { margin-bottom: 11px; }
+  .students-toolbar { align-items: stretch; flex-direction: column; margin-bottom: 11px; }
+  .students-toolbar .page-search { width: 100%; }
+  .students-toolbar-actions { justify-content: space-between; }
   .students-toolbar-actions > span { display: none; }
   .student-card { padding: 15px; }
   .modal-backdrop { place-items: end center; padding: 0; }

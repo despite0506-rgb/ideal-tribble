@@ -487,8 +487,6 @@ export function validateState(value: unknown): value is AppState {
       if (payment.status !== 'paid' && payment.status !== 'unpaid') return false
       if (!Number.isInteger(payment.amount) || payment.amount < 0) return false
       if (!/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
-      if (typeof payment.paidDate !== 'string' || (payment.paidDate && !/^\d{4}-\d{2}-\d{2}$/.test(payment.paidDate))) return false
-      if (payment.status === 'paid' && !payment.paidDate) return false
       if (typeof payment.updatedAt !== 'string') return false
     }
   }

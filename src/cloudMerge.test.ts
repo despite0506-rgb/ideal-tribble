@@ -73,7 +73,6 @@ describe('mergeCloudPayload', () => {
       status: 'paid',
       amount: 300000,
       dueDate: '2026-10-10',
-      paidDate: '2026-10-09',
       updatedAt: '2026-10-09T10:00:00.000Z',
     })
     remote.appState.paymentRecords.push({
@@ -83,7 +82,6 @@ describe('mergeCloudPayload', () => {
       status: 'unpaid',
       amount: 280000,
       dueDate: '2026-10-12',
-      paidDate: '',
       updatedAt: '2026-10-10T10:00:00.000Z',
     })
 

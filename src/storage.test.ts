@@ -20,6 +20,24 @@ describe('저장 자료 호환성', () => {
     expect(parseAppState(legacyState)?.lessons.every((lesson) => lesson.colorMode === 'auto')).toBe(true)
     expect(parseAppState(customState)?.lessons[0]?.colorMode).toBe('custom')
   })
+
+  it('이전 결제 기록의 실제 결제일은 제거하고 필요한 항목만 유지한다', () => {
+    const studentId = DEMO_STATE.students[0]!.id
+    const legacyState = {
+      ...structuredClone(DEMO_STATE),
+      paymentRecords: [{
+        id: `payment:${studentId}:2026-10`,
+        studentId,
+        month: '2026-10',
+        status: 'paid',
+        amount: 300000,
+        dueDate: '2026-10-10',
+        paidDate: '2026-10-09',
+        updatedAt: '2026-10-09T10:00:00.000Z',
+      }],
+    }
+    expect(parseAppState(legacyState)?.paymentRecords[0]).not.toHaveProperty('paidDate')
+  })
 })
 
 describe('시간표 설정', () => {

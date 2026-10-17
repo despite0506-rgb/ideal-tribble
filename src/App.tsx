@@ -82,6 +82,7 @@ import { useCloudSync, type CloudPhase } from './useCloudSync'
 type View = 'schedule' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
 type Selection = 'all' | string
+type StudentSortMode = 'registered' | 'name'
 
 type LessonModalState = {
   open: boolean
@@ -201,6 +202,11 @@ function isValidNotionUrl(value: string): boolean {
 
 function studentById(students: Student[], id: string): Student | undefined {
   return students.find((student) => student.id === id)
+}
+
+function sortStudents(students: Student[], mode: StudentSortMode): Student[] {
+  if (mode === 'registered') return [...students]
+  return [...students].sort((a, b) => a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' }))
 }
 
 function Avatar({ student, size = 'md' }: { student: Student; size?: 'sm' | 'md' | 'lg' }) {
@@ -612,6 +618,15 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (che
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span className="toggle-ui" aria-hidden="true"><span /></span>
     </label>
+  )
+}
+
+function StudentSortControl({ mode, onChange }: { mode: StudentSortMode; onChange: (mode: StudentSortMode) => void }) {
+  return (
+    <div className="student-sort-control" role="group" aria-label="학생 정렬 방식">
+      <button type="button" className={mode === 'registered' ? 'active' : ''} aria-pressed={mode === 'registered'} onClick={() => onChange('registered')}>등록순</button>
+      <button type="button" className={mode === 'name' ? 'active' : ''} aria-pressed={mode === 'name'} onClick={() => onChange('name')}>가나다순</button>
+    </div>
   )
 }
 
@@ -2072,7 +2087,6 @@ type PaymentDraft = {
   status: PaymentStatus
   amount: string
   dueDate: string
-  paidDate: string
 }
 
 function paymentDraftsForMonth(students: Student[], records: PaymentRecord[], month: string): Record<string, PaymentDraft> {
@@ -2082,7 +2096,6 @@ function paymentDraftsForMonth(students: Student[], records: PaymentRecord[], mo
       status: record?.status ?? 'unpaid',
       amount: record ? String(record.amount) : '',
       dueDate: record?.dueDate ?? '',
-      paidDate: record?.paidDate ?? '',
     }]
   }))
 }
@@ -2094,11 +2107,15 @@ function formatWon(amount: number): string {
 function PaymentManagementPage({
   students,
   records,
+  sortMode,
+  onSortModeChange,
   onSave,
   onOpenStudent,
 }: {
   students: Student[]
   records: PaymentRecord[]
+  sortMode: StudentSortMode
+  onSortModeChange: (mode: StudentSortMode) => void
   onSave: (record: PaymentRecord) => void
   onOpenStudent: (studentId: string) => void
 }) {
@@ -2114,10 +2131,10 @@ function PaymentManagementPage({
     setDirtyStudentIds(new Set())
   }, [month, students])
 
-  const filteredStudents = students.filter((student) => (
+  const filteredStudents = sortStudents(students.filter((student) => (
     matchesKoreanSearch(student.name, query)
     || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))
-  ))
+  )), sortMode)
   const paidCount = students.filter((student) => drafts[student.id]?.status === 'paid').length
   const expectedAmount = students.reduce((total, student) => {
     const amount = Number(drafts[student.id]?.amount)
@@ -2132,7 +2149,7 @@ function PaymentManagementPage({
   const updateDraft = (studentId: string, patch: Partial<PaymentDraft>) => {
     setDrafts((current) => ({
       ...current,
-      [studentId]: { status: 'unpaid', amount: '', dueDate: '', paidDate: '', ...current[studentId], ...patch },
+      [studentId]: { status: 'unpaid', amount: '', dueDate: '', ...current[studentId], ...patch },
     }))
     setErrors((current) => ({ ...current, [studentId]: '' }))
     setDirtyStudentIds((current) => new Set(current).add(studentId))
@@ -2146,11 +2163,7 @@ function PaymentManagementPage({
       return
     }
     if (!draft.dueDate) {
-      setErrors((current) => ({ ...current, [student.id]: '결제 예정일을 입력해 주세요.' }))
-      return
-    }
-    if (draft.status === 'paid' && !draft.paidDate) {
-      setErrors((current) => ({ ...current, [student.id]: '실제 결제일을 입력해 주세요.' }))
+      setErrors((current) => ({ ...current, [student.id]: '결제일을 입력해 주세요.' }))
       return
     }
     onSave({
@@ -2160,7 +2173,6 @@ function PaymentManagementPage({
       status: draft.status,
       amount,
       dueDate: draft.dueDate,
-      paidDate: draft.status === 'paid' ? draft.paidDate : '',
       updatedAt: new Date().toISOString(),
     })
     setDirtyStudentIds((current) => {
@@ -2179,6 +2191,7 @@ function PaymentManagementPage({
           <button type="button" onClick={() => setMonth((current) => shiftMonthValue(current, 1))} aria-label="다음 달"><ChevronRight size={17} /></button>
         </div>
         <label className="page-search payment-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름·초성 검색" aria-label="결제 학생 검색" /></label>
+        <StudentSortControl mode={sortMode} onChange={onSortModeChange} />
       </header>
 
       <div className="attendance-summary-cards payment-summary-cards">
@@ -2196,11 +2209,11 @@ function PaymentManagementPage({
         <div className="payment-table-scroll">
           <table className="payment-table">
             <thead>
-              <tr><th>학생</th><th>상태</th><th>결제금액</th><th>결제 예정일</th><th>실제 결제일</th><th>저장</th></tr>
+              <tr><th>학생</th><th>상태</th><th>결제금액</th><th>결제일</th><th>저장</th></tr>
             </thead>
             <tbody>
               {filteredStudents.map((student) => {
-                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '', paidDate: '' }
+                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '' }
                 const savedRecord = records.find((record) => record.studentId === student.id && record.month === month)
                 return (
                   <tr key={student.id}>
@@ -2212,13 +2225,12 @@ function PaymentManagementPage({
                     </td>
                     <td>
                       <div className="payment-status-switch" role="group" aria-label={`${student.name} 결제 상태`}>
-                        <button type="button" className={draft.status === 'unpaid' ? 'active unpaid' : ''} aria-pressed={draft.status === 'unpaid'} onClick={() => updateDraft(student.id, { status: 'unpaid', paidDate: '' })}>미납</button>
-                        <button type="button" className={draft.status === 'paid' ? 'active paid' : ''} aria-pressed={draft.status === 'paid'} onClick={() => updateDraft(student.id, { status: 'paid', paidDate: draft.paidDate || dateToInputValue(new Date()) })}>납부</button>
+                        <button type="button" className={draft.status === 'unpaid' ? 'active unpaid' : ''} aria-pressed={draft.status === 'unpaid'} onClick={() => updateDraft(student.id, { status: 'unpaid' })}>미납</button>
+                        <button type="button" className={draft.status === 'paid' ? 'active paid' : ''} aria-pressed={draft.status === 'paid'} onClick={() => updateDraft(student.id, { status: 'paid' })}>납부</button>
                       </div>
                     </td>
                     <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
-                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제 예정일</span><input type="date" value={draft.dueDate} onChange={(event) => updateDraft(student.id, { dueDate: event.target.value })} /></label></td>
-                    <td><label className="payment-field"><span className="sr-only">{student.name} 실제 결제일</span><input type="date" value={draft.paidDate} disabled={draft.status === 'unpaid'} onChange={(event) => updateDraft(student.id, { paidDate: event.target.value })} /></label></td>
+                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제일</span><input type="date" value={draft.dueDate} onChange={(event) => updateDraft(student.id, { dueDate: event.target.value })} /></label></td>
                     <td>
                       <button type="button" className="button primary payment-save-button" onClick={() => save(student)}><Check size={14} /> 저장</button>
                       {errors[student.id] && <small className="payment-row-error" role="alert">{errors[student.id]}</small>}
@@ -2228,7 +2240,7 @@ function PaymentManagementPage({
                   </tr>
                 )
               })}
-              {filteredStudents.length === 0 && <tr><td colSpan={6} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
+              {filteredStudents.length === 0 && <tr><td colSpan={5} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2528,6 +2540,7 @@ export default function App() {
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
   const [studentPageQuery, setStudentPageQuery] = useState('')
+  const [studentSortMode, setStudentSortMode] = useState<StudentSortMode>('name')
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
   const [selectedDay, setSelectedDay] = useState<Weekday>(getTodayWeekday())
   const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(() => loadScheduleSettings())
@@ -2578,11 +2591,12 @@ export default function App() {
     }
   }, [scheduleFullscreen])
 
-  const filteredStudents = appState.students.filter((student) => {
+  const sortedStudents = useMemo(() => sortStudents(appState.students, studentSortMode), [appState.students, studentSortMode])
+  const filteredStudents = sortedStudents.filter((student) => {
     const normalized = studentQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalized)
   })
-  const pageStudents = appState.students.filter((student) => {
+  const pageStudents = sortedStudents.filter((student) => {
     const normalized = studentPageQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalized)
   })
@@ -2979,7 +2993,7 @@ export default function App() {
               : view === 'groups'
                 ? '그룹 일정과 참여 인원을 한곳에서 관리하세요.'
                 : view === 'attendance' ? '전체 원생의 월별 출결 현황과 미체크 수업을 확인하세요.'
-                  : view === 'payments' ? '학생별 납부 여부와 결제 예정일, 실제 결제일을 관리하세요.'
+                  : view === 'payments' ? '학생별 납부 여부와 결제금액, 결제일을 관리하세요.'
                   : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
           </div>
           {view !== 'attendance' && view !== 'payments' && (
@@ -3046,7 +3060,7 @@ export default function App() {
         {view === 'schedule' ? (
           <>
             <StudentQuickLinks
-              students={appState.students}
+              students={sortedStudents}
               assignedStudentIds={activeTeacherStudentIds}
               onOpenStudent={showStudentDetail}
             />
@@ -3228,7 +3242,7 @@ export default function App() {
           />
         ) : view === 'attendance' ? (
           <AttendanceReportPage
-            students={appState.students}
+            students={sortedStudents}
             lessons={appState.lessons}
             records={appState.attendanceRecords}
             sessions={appState.attendanceSessions}
@@ -3238,6 +3252,8 @@ export default function App() {
           <PaymentManagementPage
             students={appState.students}
             records={appState.paymentRecords}
+            sortMode={studentSortMode}
+            onSortModeChange={setStudentSortMode}
             onSave={savePayment}
             onOpenStudent={showStudentDetail}
           />
@@ -3247,6 +3263,7 @@ export default function App() {
               <label className="page-search"><Search size={17} /><input value={studentPageQuery} onChange={(event) => setStudentPageQuery(event.target.value)} placeholder="이름, 학교, 학년으로 검색" aria-label="학생 목록 검색" /></label>
               <div className="students-toolbar-actions">
                 <span>{pageStudents.length}명의 공유 학생</span>
+                <StudentSortControl mode={studentSortMode} onChange={setStudentSortMode} />
                 <button type="button" className="button secondary" onClick={() => setSchoolColorModalOpen(true)}><Palette size={15} /> 학교별 색상</button>
               </div>
             </div>
@@ -3317,7 +3334,7 @@ export default function App() {
         <LessonModal
           key={lessonModal.lessonId ?? `new-${lessonModal.presetStudentId ?? ''}-${lessonModal.presetWeekday ?? ''}-${lessonModal.presetKind ?? ''}`}
           lesson={activeLesson}
-          students={appState.students}
+          students={sortedStudents}
           lessons={appState.lessons}
           presetStudentId={lessonModal.presetStudentId}
           presetWeekday={lessonModal.presetWeekday}
@@ -3392,7 +3409,7 @@ export default function App() {
         <GroupMembersModal
           key={activeGroupSeries.id}
           series={activeGroupSeries}
-          students={appState.students}
+          students={sortedStudents}
           lessons={appState.lessons}
           transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setGroupMembersModalId(null)}
