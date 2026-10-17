@@ -1,6 +1,7 @@
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type TeacherId = 'teacher-1' | 'teacher-2' | 'teacher-3'
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'excused'
+export type PaymentStatus = 'paid' | 'unpaid'
 
 export type Transport = {
   arrivalRide: boolean
@@ -70,12 +71,24 @@ export type AttendanceSession = {
   updatedAt: string
 }
 
+export type PaymentRecord = {
+  id: string
+  studentId: string
+  month: string
+  status: PaymentStatus
+  amount: number
+  dueDate: string
+  paidDate: string
+  updatedAt: string
+}
+
 export type AppState = {
   schemaVersion: 1
   students: Student[]
   lessons: Lesson[]
   attendanceRecords: AttendanceRecord[]
   attendanceSessions: AttendanceSession[]
+  paymentRecords: PaymentRecord[]
 }
 
 export type WeekendMode = 'hidden' | 'combined' | 'separate'

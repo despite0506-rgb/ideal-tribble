@@ -60,6 +60,38 @@ describe('mergeCloudPayload', () => {
     expect(merged.appState.attendanceRecords).toHaveLength(2)
   })
 
+  it('keeps monthly payments saved concurrently for different students', () => {
+    const base = payload()
+    const local = structuredClone(base)
+    const remote = structuredClone(base)
+    const firstStudent = base.appState.students[0]!
+    const secondStudent = base.appState.students[1]!
+    local.appState.paymentRecords.push({
+      id: `payment:${firstStudent.id}:2026-10`,
+      studentId: firstStudent.id,
+      month: '2026-10',
+      status: 'paid',
+      amount: 300000,
+      dueDate: '2026-10-10',
+      paidDate: '2026-10-09',
+      updatedAt: '2026-10-09T10:00:00.000Z',
+    })
+    remote.appState.paymentRecords.push({
+      id: `payment:${secondStudent.id}:2026-10`,
+      studentId: secondStudent.id,
+      month: '2026-10',
+      status: 'unpaid',
+      amount: 280000,
+      dueDate: '2026-10-12',
+      paidDate: '',
+      updatedAt: '2026-10-10T10:00:00.000Z',
+    })
+
+    const merged = mergeCloudPayload(base, local, remote)
+
+    expect(merged.appState.paymentRecords).toHaveLength(2)
+  })
+
   it('combines independent changes to the same student', () => {
     const base = payload()
     const local = structuredClone(base)

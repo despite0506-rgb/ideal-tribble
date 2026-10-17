@@ -294,6 +294,10 @@ export function attendanceSessionId(lessonId: string, date: string): string {
   return `attendance-session:${lessonId}:${date}`
 }
 
+export function paymentRecordId(studentId: string, month: string): string {
+  return `payment:${studentId}:${month}`
+}
+
 export function lessonOccurrenceDates(lesson: Pick<Lesson, 'weekday'>, month: string): string[] {
   if (!/^\d{4}-\d{2}$/.test(month)) return []
   const [yearText, monthText] = month.split('-')
@@ -465,6 +469,27 @@ export function validateState(value: unknown): value is AppState {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(session.date)) return false
       if (!Number.isInteger(session.actualEndMinute) || session.actualEndMinute < 0 || session.actualEndMinute >= 1440) return false
       if (typeof session.updatedAt !== 'string') return false
+    }
+  }
+  if (state.paymentRecords !== undefined) {
+    if (!Array.isArray(state.paymentRecords)) return false
+    const paymentIds = new Set<string>()
+    const paymentKeys = new Set<string>()
+    for (const payment of state.paymentRecords) {
+      if (!payment || typeof payment !== 'object') return false
+      if (typeof payment.id !== 'string' || paymentIds.has(payment.id)) return false
+      paymentIds.add(payment.id)
+      if (typeof payment.studentId !== 'string' || !studentIds.has(payment.studentId)) return false
+      if (!/^\d{4}-\d{2}$/.test(payment.month)) return false
+      const paymentKey = `${payment.studentId}:${payment.month}`
+      if (paymentKeys.has(paymentKey)) return false
+      paymentKeys.add(paymentKey)
+      if (payment.status !== 'paid' && payment.status !== 'unpaid') return false
+      if (!Number.isInteger(payment.amount) || payment.amount < 0) return false
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
+      if (typeof payment.paidDate !== 'string' || (payment.paidDate && !/^\d{4}-\d{2}-\d{2}$/.test(payment.paidDate))) return false
+      if (payment.status === 'paid' && !payment.paidDate) return false
+      if (typeof payment.updatedAt !== 'string') return false
     }
   }
   return true

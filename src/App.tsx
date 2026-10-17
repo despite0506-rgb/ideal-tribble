@@ -13,6 +13,7 @@ import {
   Cloud,
   CloudOff,
   Copy,
+  CreditCard,
   Download,
   ExternalLink,
   LayoutDashboard,
@@ -54,6 +55,7 @@ import {
   createId,
   attendanceRecordId,
   attendanceSessionId,
+  paymentRecordId,
   buildMonthlyAttendanceSummaries,
   dateForWeekdayInCurrentWeek,
   dateToInputValue,
@@ -74,10 +76,10 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, PaymentRecord, PaymentStatus, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
-type View = 'schedule' | 'groups' | 'attendance' | 'students' | 'student'
+type View = 'schedule' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
 type Selection = 'all' | string
 
@@ -800,7 +802,7 @@ function StudentModal({
       <DeleteConfirmationModal
         kind="student"
         targetName={student.name}
-        description={`학생 정보와 피드백, 출석 기록, 연결된 수업 ${relatedLessonCount}개가 함께 삭제됩니다. 그룹 수업이 포함되어 있다면 다른 참여 학생의 시간표에서도 해당 수업 전체가 삭제됩니다.`}
+        description={`학생 정보와 피드백, 출석·결제 기록, 연결된 수업 ${relatedLessonCount}개가 함께 삭제됩니다. 그룹 수업이 포함되어 있다면 다른 참여 학생의 시간표에서도 해당 수업 전체가 삭제됩니다.`}
         onBack={() => setConfirmingDelete(false)}
         onConfirm={() => onDelete(student.id)}
       />
@@ -1190,6 +1192,7 @@ function AttendanceModal({
   teacherName,
   onClose,
   onOpenSettings,
+  onOpenStudent,
   onSave,
 }: {
   lesson: Lesson
@@ -1199,6 +1202,7 @@ function AttendanceModal({
   teacherName: string
   onClose: () => void
   onOpenSettings: () => void
+  onOpenStudent: (studentId: string) => void
   onSave: (date: string, records: AttendanceRecord[], session: AttendanceSession) => void
 }) {
   const initialDate = dateForWeekdayInCurrentWeek(lesson.weekday)
@@ -1209,6 +1213,7 @@ function AttendanceModal({
   })
   const [timeError, setTimeError] = useState('')
   const recordsForDate = records.filter((record) => record.lessonId === lesson.id && record.date === date)
+  const savedSessionForDate = sessions.find((item) => item.lessonId === lesson.id && item.date === date)
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>(() => Object.fromEntries(
     lesson.participants.map((participant) => {
       const record = records.find((item) => (
@@ -1299,7 +1304,7 @@ function AttendanceModal({
               <button type="button" onClick={() => setDate((current) => shiftDateValue(current, 7))} aria-label="다음 주"><ChevronRight size={16} /></button>
             </div>
             <label className="attendance-end-time">
-              <span>실제 종료</span>
+              <span>실제 수업 종료</span>
               <input
                 type="time"
                 step={60}
@@ -1311,6 +1316,7 @@ function AttendanceModal({
                 }}
                 required
               />
+              <small>{savedSessionForDate ? `${koreanDateLabel(date)} 저장됨` : `${koreanDateLabel(date)} 미저장`}</small>
             </label>
           </section>
           {timeError && <p className="form-error attendance-time-error">{timeError}</p>}
@@ -1330,10 +1336,10 @@ function AttendanceModal({
               const draft = drafts[student.id] ?? { note: '' }
               return (
                 <article className="attendance-student-row" key={student.id}>
-                  <div className="attendance-student-name">
+                  <button type="button" className="attendance-student-name attendance-student-link" onClick={() => onOpenStudent(student.id)}>
                     <Avatar student={student} size="md" />
                     <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
-                  </div>
+                  </button>
                   <div className="attendance-status-options" role="group" aria-label={`${student.name} 출결 상태`}>
                     {ATTENDANCE_STATUSES.map((status) => (
                       <button
@@ -1362,7 +1368,13 @@ function AttendanceModal({
               )
             })}
           </div>
-          {recordsForDate.length > 0 && <p className="attendance-saved-note">이 날짜에 저장된 출석 기록을 불러왔습니다.</p>}
+          {(recordsForDate.length > 0 || savedSessionForDate) && (
+            <p className="attendance-saved-note">
+              {savedSessionForDate
+                ? `${koreanDateLabel(date)} 기록 · 실제 종료 ${minutesToTime(savedSessionForDate.actualEndMinute)}`
+                : '이 날짜의 출석 기록을 불러왔습니다. 실제 종료 시간은 아직 저장되지 않았습니다.'}
+            </p>
+          )}
         </div>
         <footer className="modal-footer">
           <button type="button" className="button secondary attendance-settings-button" onClick={onOpenSettings}><Settings2 size={15} /> 수업 설정</button>
@@ -1897,16 +1909,19 @@ function AttendanceReportPage({
   students,
   lessons,
   records,
+  sessions,
   teacherNames,
 }: {
   students: Student[]
   lessons: Lesson[]
   records: AttendanceRecord[]
+  sessions: AttendanceSession[]
   teacherNames: ScheduleSettings['teacherNames']
 }) {
   const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
   const [teacherFilter, setTeacherFilter] = useState<TeacherId | 'all'>('all')
   const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim()
   const summaries = buildMonthlyAttendanceSummaries(students, lessons, records, month, teacherFilter)
   const filteredSummaries = summaries.filter((summary) => {
     const student = studentById(students, summary.studentId)
@@ -1925,6 +1940,18 @@ function AttendanceReportPage({
   }), { scheduled: 0, present: 0, late: 0, absent: 0, excused: 0, unchecked: 0 })
   const checkedForRate = totals.present + totals.late + totals.absent
   const overallRate = checkedForRate > 0 ? Math.round(((totals.present + totals.late) / checkedForRate) * 100) : null
+  const sessionRows = sessions
+    .filter((session) => session.date.startsWith(month))
+    .map((session) => ({ session, lesson: lessons.find((lesson) => lesson.id === session.lessonId) }))
+    .filter(({ lesson }) => teacherFilter === 'all' || lesson?.teacherId === teacherFilter)
+    .filter(({ lesson }) => !normalizedQuery || lesson?.participants.some((participant) => {
+      const student = studentById(students, participant.studentId)
+      return student && (
+        matchesKoreanSearch(student.name, normalizedQuery)
+        || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(normalizedQuery.toLocaleLowerCase('ko'))
+      )
+    }))
+    .sort((a, b) => b.session.date.localeCompare(a.session.date) || b.session.actualEndMinute - a.session.actualEndMinute)
 
   const downloadCsv = () => {
     const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
@@ -1974,6 +2001,37 @@ function AttendanceReportPage({
         <article><span>출석률</span><strong>{overallRate === null ? '—' : `${overallRate}%`}</strong><small>출석·지각 포함</small></article>
       </div>
 
+      <section className="attendance-report-table-card attendance-session-card">
+        <header>
+          <div><CalendarDays size={18} /><h2>날짜별 수업 종료 시간</h2></div>
+          <span>{koreanMonthLabel(month)} · {sessionRows.length}개 기록</span>
+        </header>
+        <div className="attendance-table-scroll">
+          <table className="attendance-report-table attendance-session-table">
+            <thead>
+              <tr><th>날짜</th><th>수업</th><th>학생</th><th>예정 종료</th><th>실제 종료</th></tr>
+            </thead>
+            <tbody>
+              {sessionRows.map(({ session, lesson }) => {
+                const participantNames = lesson?.participants
+                  .map((participant) => studentById(students, participant.studentId)?.name)
+                  .filter(Boolean).join(' · ') ?? ''
+                return (
+                  <tr key={session.id}>
+                    <td><strong>{koreanDateLabel(session.date)}</strong></td>
+                    <td><span className="session-lesson-name"><strong>{lesson?.label || '삭제된 수업'}</strong><small>{lesson ? teacherNames[TEACHERS.find((teacher) => teacher.id === lesson.teacherId)?.index ?? 0] : ''}</small></span></td>
+                    <td>{participantNames || '—'}</td>
+                    <td>{lesson ? minutesToTime(lesson.endMinute) : '—'}</td>
+                    <td><span className="actual-end-badge">{minutesToTime(session.actualEndMinute)}</span></td>
+                  </tr>
+                )
+              })}
+              {sessionRows.length === 0 && <tr><td colSpan={5} className="attendance-report-empty">이 달에 저장된 실제 종료 시간이 없습니다.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="attendance-report-table-card">
         <header>
           <div><ClipboardCheck size={18} /><h2>전체 원생 월별 출석</h2></div>
@@ -2002,6 +2060,175 @@ function AttendanceReportPage({
                 )
               })}
               {filteredSummaries.length === 0 && <tr><td colSpan={8} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+type PaymentDraft = {
+  status: PaymentStatus
+  amount: string
+  dueDate: string
+  paidDate: string
+}
+
+function paymentDraftsForMonth(students: Student[], records: PaymentRecord[], month: string): Record<string, PaymentDraft> {
+  return Object.fromEntries(students.map((student) => {
+    const record = records.find((item) => item.studentId === student.id && item.month === month)
+    return [student.id, {
+      status: record?.status ?? 'unpaid',
+      amount: record ? String(record.amount) : '',
+      dueDate: record?.dueDate ?? '',
+      paidDate: record?.paidDate ?? '',
+    }]
+  }))
+}
+
+function formatWon(amount: number): string {
+  return `${new Intl.NumberFormat('ko-KR').format(amount)}원`
+}
+
+function PaymentManagementPage({
+  students,
+  records,
+  onSave,
+  onOpenStudent,
+}: {
+  students: Student[]
+  records: PaymentRecord[]
+  onSave: (record: PaymentRecord) => void
+  onOpenStudent: (studentId: string) => void
+}) {
+  const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
+  const [query, setQuery] = useState('')
+  const [drafts, setDrafts] = useState<Record<string, PaymentDraft>>(() => paymentDraftsForMonth(students, records, month))
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    setDrafts(paymentDraftsForMonth(students, records, month))
+    setErrors({})
+    setDirtyStudentIds(new Set())
+  }, [month, students])
+
+  const filteredStudents = students.filter((student) => (
+    matchesKoreanSearch(student.name, query)
+    || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))
+  ))
+  const paidCount = students.filter((student) => drafts[student.id]?.status === 'paid').length
+  const expectedAmount = students.reduce((total, student) => {
+    const amount = Number(drafts[student.id]?.amount)
+    return total + (Number.isFinite(amount) && amount >= 0 ? amount : 0)
+  }, 0)
+  const paidAmount = students.reduce((total, student) => {
+    const draft = drafts[student.id]
+    const amount = Number(draft?.amount)
+    return total + (draft?.status === 'paid' && Number.isFinite(amount) && amount >= 0 ? amount : 0)
+  }, 0)
+
+  const updateDraft = (studentId: string, patch: Partial<PaymentDraft>) => {
+    setDrafts((current) => ({
+      ...current,
+      [studentId]: { status: 'unpaid', amount: '', dueDate: '', paidDate: '', ...current[studentId], ...patch },
+    }))
+    setErrors((current) => ({ ...current, [studentId]: '' }))
+    setDirtyStudentIds((current) => new Set(current).add(studentId))
+  }
+
+  const save = (student: Student) => {
+    const draft = drafts[student.id]
+    const amount = Number(draft?.amount)
+    if (!draft || !draft.amount.trim() || !Number.isInteger(amount) || amount < 0) {
+      setErrors((current) => ({ ...current, [student.id]: '결제금액을 원 단위 숫자로 입력해 주세요.' }))
+      return
+    }
+    if (!draft.dueDate) {
+      setErrors((current) => ({ ...current, [student.id]: '결제 예정일을 입력해 주세요.' }))
+      return
+    }
+    if (draft.status === 'paid' && !draft.paidDate) {
+      setErrors((current) => ({ ...current, [student.id]: '실제 결제일을 입력해 주세요.' }))
+      return
+    }
+    onSave({
+      id: paymentRecordId(student.id, month),
+      studentId: student.id,
+      month,
+      status: draft.status,
+      amount,
+      dueDate: draft.dueDate,
+      paidDate: draft.status === 'paid' ? draft.paidDate : '',
+      updatedAt: new Date().toISOString(),
+    })
+    setDirtyStudentIds((current) => {
+      const next = new Set(current)
+      next.delete(student.id)
+      return next
+    })
+  }
+
+  return (
+    <section className="payment-page">
+      <header className="payment-toolbar">
+        <div className="month-selector">
+          <button type="button" onClick={() => setMonth((current) => shiftMonthValue(current, -1))} aria-label="이전 달"><ChevronLeft size={17} /></button>
+          <label><span>{koreanMonthLabel(month)}</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+          <button type="button" onClick={() => setMonth((current) => shiftMonthValue(current, 1))} aria-label="다음 달"><ChevronRight size={17} /></button>
+        </div>
+        <label className="page-search payment-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="학생 이름·초성 검색" aria-label="결제 학생 검색" /></label>
+      </header>
+
+      <div className="attendance-summary-cards payment-summary-cards">
+        <article><span>납부 완료</span><strong>{paidCount}</strong><small>{students.length}명 중</small></article>
+        <article className={students.length - paidCount > 0 ? 'needs-check' : ''}><span>미납</span><strong>{students.length - paidCount}</strong><small>{students.length - paidCount > 0 ? '확인 필요' : '모두 납부'}</small></article>
+        <article><span>결제 예정액</span><strong>{formatWon(expectedAmount)}</strong><small>입력된 금액 합계</small></article>
+        <article><span>실제 납부액</span><strong>{formatWon(paidAmount)}</strong><small>납부 완료 합계</small></article>
+      </div>
+
+      <section className="payment-table-card">
+        <header>
+          <div><CreditCard size={18} /><h2>학생별 결제 현황</h2></div>
+          <span>{filteredStudents.length}명 · 행마다 저장해 주세요</span>
+        </header>
+        <div className="payment-table-scroll">
+          <table className="payment-table">
+            <thead>
+              <tr><th>학생</th><th>상태</th><th>결제금액</th><th>결제 예정일</th><th>실제 결제일</th><th>저장</th></tr>
+            </thead>
+            <tbody>
+              {filteredStudents.map((student) => {
+                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '', paidDate: '' }
+                const savedRecord = records.find((record) => record.studentId === student.id && record.month === month)
+                return (
+                  <tr key={student.id}>
+                    <td>
+                      <button type="button" className="payment-student-link" onClick={() => onOpenStudent(student.id)}>
+                        <Avatar student={student} size="sm" />
+                        <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
+                      </button>
+                    </td>
+                    <td>
+                      <div className="payment-status-switch" role="group" aria-label={`${student.name} 결제 상태`}>
+                        <button type="button" className={draft.status === 'unpaid' ? 'active unpaid' : ''} aria-pressed={draft.status === 'unpaid'} onClick={() => updateDraft(student.id, { status: 'unpaid', paidDate: '' })}>미납</button>
+                        <button type="button" className={draft.status === 'paid' ? 'active paid' : ''} aria-pressed={draft.status === 'paid'} onClick={() => updateDraft(student.id, { status: 'paid', paidDate: draft.paidDate || dateToInputValue(new Date()) })}>납부</button>
+                      </div>
+                    </td>
+                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
+                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제 예정일</span><input type="date" value={draft.dueDate} onChange={(event) => updateDraft(student.id, { dueDate: event.target.value })} /></label></td>
+                    <td><label className="payment-field"><span className="sr-only">{student.name} 실제 결제일</span><input type="date" value={draft.paidDate} disabled={draft.status === 'unpaid'} onChange={(event) => updateDraft(student.id, { paidDate: event.target.value })} /></label></td>
+                    <td>
+                      <button type="button" className="button primary payment-save-button" onClick={() => save(student)}><Check size={14} /> 저장</button>
+                      {errors[student.id] && <small className="payment-row-error" role="alert">{errors[student.id]}</small>}
+                      {!errors[student.id] && savedRecord && !dirtyStudentIds.has(student.id) && <small className="payment-saved-at">저장됨</small>}
+                      {!errors[student.id] && dirtyStudentIds.has(student.id) && <small className="payment-unsaved">저장 필요</small>}
+                    </td>
+                  </tr>
+                )
+              })}
+              {filteredStudents.length === 0 && <tr><td colSpan={6} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2377,6 +2604,8 @@ export default function App() {
     || lesson.startMinute >= scheduleSettings.endMinute
   )).length
   const today = getTodayWeekday()
+  const currentMonth = dateToInputValue(new Date()).slice(0, 7)
+  const currentMonthPaidCount = appState.paymentRecords.filter((record) => record.month === currentMonth && record.status === 'paid').length
   const todayLessons = teacherLessons.filter((lesson) => lesson.weekday === today)
   const todayRideCount = todayLessons.reduce(
     (count, lesson) => count + lesson.participants.filter((participant) => participant.transport.arrivalRide || participant.transport.departureRide).length,
@@ -2440,6 +2669,18 @@ export default function App() {
     setNotice(`${koreanDateLabel(date)} 출석을 저장했습니다.`)
   }
 
+  const savePayment = (payment: PaymentRecord) => {
+    setAppState((current) => ({
+      ...current,
+      paymentRecords: [
+        ...current.paymentRecords.filter((record) => record.id !== payment.id),
+        payment,
+      ],
+    }))
+    const student = studentById(appState.students, payment.studentId)
+    setNotice(`${student?.name ?? '학생'}의 ${koreanMonthLabel(payment.month)} 결제 정보를 저장했습니다.`)
+  }
+
   const saveStudent = (student: Student) => {
     setAppState((current) => ({
       ...current,
@@ -2496,6 +2737,7 @@ export default function App() {
       students: current.students.filter((student) => student.id !== studentId),
       lessons: current.lessons.filter((lesson) => !lesson.participants.some((participant) => participant.studentId === studentId)),
       attendanceRecords: current.attendanceRecords.filter((record) => record.studentId !== studentId),
+      paymentRecords: current.paymentRecords.filter((record) => record.studentId !== studentId),
     }))
     if (selectedStudentId === studentId) setSelectedStudentId('all')
     if (detailStudentId === studentId) {
@@ -2503,7 +2745,7 @@ export default function App() {
       setView('students')
     }
     setStudentModal({ open: false })
-    setNotice('학생과 연결된 수업·출석 기록을 삭제했습니다.')
+    setNotice('학생과 연결된 수업·출석·결제 기록을 삭제했습니다.')
   }
 
   const showStudentSchedule = (studentId: string) => {
@@ -2650,6 +2892,9 @@ export default function App() {
           <button type="button" className={view === 'attendance' ? 'active' : ''} onClick={() => setView('attendance')}>
             <ClipboardCheck size={18} /> 출석 관리 <span>{appState.attendanceRecords.filter((record) => record.date.startsWith(dateToInputValue(new Date()).slice(0, 7))).length}</span>
           </button>
+          <button type="button" className={view === 'payments' ? 'active' : ''} onClick={() => setView('payments')}>
+            <CreditCard size={18} /> 결제 관리 <span>{Math.max(0, appState.students.length - currentMonthPaidCount)}</span>
+          </button>
           <button type="button" className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}>
             <UsersRound size={18} /> 학생 관리 <span>{appState.students.length}</span>
           </button>
@@ -2727,15 +2972,17 @@ export default function App() {
               : view === 'groups'
                 ? `${activeTeacherName} 그룹 수업`
                 : view === 'attendance' ? '월별 출석 관리'
+                  : view === 'payments' ? '월별 결제 관리'
                   : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
             <p>{view === 'schedule'
               ? (scheduleSettings.transportEnabled ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : '매주 반복되는 수업을 한눈에 확인하세요.')
               : view === 'groups'
                 ? '그룹 일정과 참여 인원을 한곳에서 관리하세요.'
                 : view === 'attendance' ? '전체 원생의 월별 출결 현황과 미체크 수업을 확인하세요.'
+                  : view === 'payments' ? '학생별 납부 여부와 결제 예정일, 실제 결제일을 관리하세요.'
                   : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
           </div>
-          {view !== 'attendance' && (
+          {view !== 'attendance' && view !== 'payments' && (
             <button type="button" className="button primary top-add" onClick={() => {
               if (view === 'students') setBulkStudentModalOpen(true)
               else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
@@ -2984,7 +3231,15 @@ export default function App() {
             students={appState.students}
             lessons={appState.lessons}
             records={appState.attendanceRecords}
+            sessions={appState.attendanceSessions}
             teacherNames={scheduleSettings.teacherNames}
+          />
+        ) : view === 'payments' ? (
+          <PaymentManagementPage
+            students={appState.students}
+            records={appState.paymentRecords}
+            onSave={savePayment}
+            onOpenStudent={showStudentDetail}
           />
         ) : view === 'students' ? (
           <section className="students-page">
@@ -3049,10 +3304,12 @@ export default function App() {
           if (view === 'schedule') openNewLesson(selectedDay)
           else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
           else if (view === 'attendance') openNewLesson(selectedDay)
+          else if (view === 'payments') setNotice('학생별 결제 정보를 입력한 뒤 행의 저장 버튼을 눌러 주세요.')
           else if (view === 'student') openNewLesson(undefined, detailStudent?.id)
           else setBulkStudentModalOpen(true)
         }}><Plus size={23} /><span>추가</span></button>
         <button type="button" className={view === 'attendance' ? 'active' : ''} onClick={() => setView('attendance')}><ClipboardCheck size={20} /><span>출석</span></button>
+        <button type="button" className={view === 'payments' ? 'active' : ''} onClick={() => setView('payments')}><CreditCard size={20} /><span>결제</span></button>
         <button type="button" className={view === 'students' || view === 'student' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
       </nav>
 
@@ -3084,6 +3341,10 @@ export default function App() {
           onOpenSettings={() => {
             setAttendanceModalLessonId(null)
             setLessonModal({ open: true, lessonId: activeAttendanceLesson.id })
+          }}
+          onOpenStudent={(studentId) => {
+            setAttendanceModalLessonId(null)
+            showStudentDetail(studentId)
           }}
           onSave={(date, records, session) => saveAttendance(activeAttendanceLesson, date, records, session)}
         />

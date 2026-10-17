@@ -4,8 +4,13 @@ import { DEFAULT_SCHEDULE_SETTINGS, parseAppState, parseScheduleSettings } from 
 
 describe('저장 자료 호환성', () => {
   it('출석 기능 추가 전 자료에는 빈 출석 기록을 채운다', () => {
-    const { attendanceRecords: _attendanceRecords, attendanceSessions: _attendanceSessions, ...legacyState } = structuredClone(DEMO_STATE)
-    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [] })
+    const {
+      attendanceRecords: _attendanceRecords,
+      attendanceSessions: _attendanceSessions,
+      paymentRecords: _paymentRecords,
+      ...legacyState
+    } = structuredClone(DEMO_STATE)
+    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [], paymentRecords: [] })
   })
 
   it('기존 수업은 자동 색상으로, 직접 지정한 색은 사용자 색상으로 구분한다', () => {

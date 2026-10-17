@@ -37,6 +37,7 @@ export const normalizeState = (state: AppState): AppState => ({
   })),
   attendanceRecords: Array.isArray(state.attendanceRecords) ? state.attendanceRecords : [],
   attendanceSessions: Array.isArray(state.attendanceSessions) ? state.attendanceSessions : [],
+  paymentRecords: Array.isArray(state.paymentRecords) ? state.paymentRecords : [],
 })
 
 export function parseAppState(value: unknown): AppState | null {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   attendanceRecordId,
   attendanceSessionId,
+  paymentRecordId,
   buildMonthlyAttendanceSummaries,
   dateForWeekdayInCurrentWeek,
   intervalsOverlap,
@@ -190,6 +191,12 @@ describe('출석 날짜와 월별 집계', () => {
   })
 })
 
+describe('결제 기록', () => {
+  it('학생과 월로 결제 기록 id를 만든다', () => {
+    expect(paymentRecordId('student-1', '2026-10')).toBe('payment:student-1:2026-10')
+  })
+})
+
 describe('학생 학년 그룹', () => {
   it('학교급과 학년을 초5, 중1 형식으로 묶는다', () => {
     expect(getStudentGradeGroup({ school: '한빛초', grade: '5학년' })).toBe('초5')
@@ -328,6 +335,7 @@ describe('저장 데이터 검증', () => {
     lessons: [lesson('one', ['a'], 600, 660), lesson('group', ['b', 'c'], 700, 760)],
     attendanceRecords: [],
     attendanceSessions: [],
+    paymentRecords: [],
   }
 
   it('정상 상태를 허용한다', () => {
@@ -366,5 +374,21 @@ describe('저장 데이터 검증', () => {
     }]
     expect(validateState({ ...validState, attendanceSessions })).toBe(true)
     expect(validateState({ ...validState, attendanceSessions: [{ ...attendanceSessions[0], actualEndMinute: 1440 }] })).toBe(false)
+  })
+
+  it('학생별 월 결제 기록을 검증한다', () => {
+    const paymentRecords = [{
+      id: paymentRecordId('a', '2026-10'),
+      studentId: 'a',
+      month: '2026-10',
+      status: 'paid' as const,
+      amount: 320000,
+      dueDate: '2026-10-10',
+      paidDate: '2026-10-09',
+      updatedAt: '2026-10-09T10:00:00.000Z',
+    }]
+    expect(validateState({ ...validState, paymentRecords })).toBe(true)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], amount: -1 }] })).toBe(false)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], paidDate: '' }] })).toBe(false)
   })
 })
