@@ -9,6 +9,7 @@ import {
   getScheduleColumns,
   getKoreanInitials,
   getDefaultLessonColor,
+  getDefaultTuition,
   getLessonColor,
   getStudentGradeGroup,
   gradeGroupSortValue,
@@ -24,6 +25,7 @@ import {
   validateState,
   DEFAULT_KOREAN_LESSON_COLORS,
   DEFAULT_LESSON_COLORS,
+  DEFAULT_TUITION_AMOUNTS,
 } from './domain'
 import type { AppState, AttendanceRecord, Lesson, LessonDraft, Student } from './types'
 
@@ -123,6 +125,32 @@ describe('수업 색상', () => {
     expect(getLessonColor({
       ...lesson('auto', ['a'], 600, 660), label: '국어', color: '#123456', colorMode: 'auto',
     }, levelStudents)).toBe(DEFAULT_KOREAN_LESSON_COLORS.elementary)
+  })
+})
+
+describe('기본 원비', () => {
+  const elementary = { ...students[0]!, school: '청운초', grade: '5학년' }
+  const middle = { ...students[1]!, school: '광희중', grade: '2학년' }
+  const high = { ...students[2]!, school: '북고', grade: '3학년' }
+  const tuitionLessons = [
+    { ...lesson('elementary-math', ['a'], 600, 660), label: '초등 수학' },
+    { ...lesson('middle-math', ['b'], 600, 660), label: '중등 수학' },
+    { ...lesson('middle-korean', ['b'], 700, 760), label: '중등 국어' },
+    { ...lesson('high-math', ['c'], 600, 660), label: '고등 수학' },
+    { ...lesson('high-korean', ['c'], 700, 760), label: '고등 국어' },
+  ]
+
+  it('학교급과 등록 과목에 맞춰 기본 원비를 계산한다', () => {
+    expect(getDefaultTuition(elementary, tuitionLessons)).toBe(DEFAULT_TUITION_AMOUNTS.elementaryMath)
+    expect(getDefaultTuition(middle, tuitionLessons)).toBe(DEFAULT_TUITION_AMOUNTS.middleMath + DEFAULT_TUITION_AMOUNTS.middleKorean)
+    expect(getDefaultTuition(high, tuitionLessons)).toBe(DEFAULT_TUITION_AMOUNTS.highMath + DEFAULT_TUITION_AMOUNTS.highKorean)
+  })
+
+  it('같은 과목 수업이 여러 개여도 기본 원비를 한 번만 적용한다', () => {
+    expect(getDefaultTuition(elementary, [
+      ...tuitionLessons,
+      { ...lesson('elementary-math-2', ['a'], 700, 760), label: '수학 심화' },
+    ])).toBe(DEFAULT_TUITION_AMOUNTS.elementaryMath)
   })
 })
 
@@ -384,9 +412,20 @@ describe('저장 데이터 검증', () => {
       status: 'paid' as const,
       amount: 320000,
       dueDate: '2026-10-10',
+      paymentParts: [{ id: 'payment:a:2026-10:card', method: 'card' as const, amount: 320000 }],
       updatedAt: '2026-10-09T10:00:00.000Z',
     }]
     expect(validateState({ ...validState, paymentRecords })).toBe(true)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], amount: -1 }] })).toBe(false)
+    expect(validateState({
+      ...validState,
+      paymentRecords: [{
+        ...paymentRecords[0],
+        paymentParts: [
+          paymentRecords[0]!.paymentParts[0]!,
+          { id: 'payment:a:2026-10:card-2', method: 'card', amount: 10000 },
+        ],
+      }],
+    })).toBe(false)
   })
 })

@@ -36,6 +36,7 @@ describe('저장 자료 호환성', () => {
         updatedAt: '2026-10-09T10:00:00.000Z',
       }],
     }
+    expect(parseAppState(legacyState)?.paymentRecords[0]).toMatchObject({ paymentParts: [] })
     expect(parseAppState(legacyState)?.paymentRecords[0]).not.toHaveProperty('paidDate')
   })
 })

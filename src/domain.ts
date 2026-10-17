@@ -364,6 +364,32 @@ export function getStudentGradeGroup(student: Pick<Student, 'school' | 'grade'>)
   return `${number}학년`
 }
 
+export const DEFAULT_TUITION_AMOUNTS = {
+  elementaryMath: 200000,
+  middleMath: 250000,
+  highMath: 300000,
+  middleKorean: 160000,
+  highKorean: 270000,
+} as const
+
+export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
+  const gradeGroup = getStudentGradeGroup(student)
+  const studentLessons = lessonsForStudent(lessons, student.id)
+  const hasMath = studentLessons.some((lesson) => lesson.label.includes('수학'))
+  const hasKorean = studentLessons.some((lesson) => lesson.label.includes('국어'))
+  let amount = 0
+  if (hasMath) {
+    if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highMath
+    else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleMath
+    else if (gradeGroup.startsWith('초')) amount += DEFAULT_TUITION_AMOUNTS.elementaryMath
+  }
+  if (hasKorean) {
+    if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highKorean
+    else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleKorean
+  }
+  return amount
+}
+
 export function getDefaultLessonColor(studentIds: string[], students: Student[], lessonLabel = ''): string {
   const highestLevel = studentIds.reduce((highest, studentId) => {
     const student = students.find((item) => item.id === studentId)
@@ -487,6 +513,19 @@ export function validateState(value: unknown): value is AppState {
       if (payment.status !== 'paid' && payment.status !== 'unpaid') return false
       if (!Number.isInteger(payment.amount) || payment.amount < 0) return false
       if (!/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
+      if (payment.paymentParts !== undefined) {
+        if (!Array.isArray(payment.paymentParts)) return false
+        const partIds = new Set<string>()
+        const methods = new Set<string>()
+        for (const part of payment.paymentParts) {
+          if (!part || typeof part !== 'object') return false
+          if (typeof part.id !== 'string' || partIds.has(part.id)) return false
+          partIds.add(part.id)
+          if (!['card', 'qr', 'transfer', 'cash'].includes(part.method) || methods.has(part.method)) return false
+          methods.add(part.method)
+          if (!Number.isInteger(part.amount) || part.amount <= 0) return false
+        }
+      }
       if (typeof payment.updatedAt !== 'string') return false
     }
   }

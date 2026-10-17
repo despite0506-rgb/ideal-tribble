@@ -44,6 +44,7 @@ export const normalizeState = (state: AppState): AppState => ({
     status: record.status,
     amount: record.amount,
     dueDate: record.dueDate,
+    paymentParts: Array.isArray(record.paymentParts) ? record.paymentParts : [],
     updatedAt: record.updatedAt,
   })) : [],
 })

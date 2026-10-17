@@ -49,6 +49,7 @@ import {
 } from 'react'
 import {
   type GroupLessonSeries,
+  DEFAULT_TUITION_AMOUNTS,
   LESSON_COLORS,
   STUDENT_COLORS,
   WEEKDAYS,
@@ -61,6 +62,7 @@ import {
   dateToInputValue,
   formatDuration,
   getDefaultLessonColor,
+  getDefaultTuition,
   getLessonColor,
   getStudentGradeGroup,
   gradeGroupSortValue,
@@ -76,7 +78,7 @@ import {
   validateLesson,
 } from './domain'
 import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, PaymentRecord, PaymentStatus, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, Lesson, LessonDraft, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
 type View = 'schedule' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
@@ -123,6 +125,12 @@ const ATTENDANCE_STATUSES: { value: AttendanceStatus; label: string; short: stri
   { value: 'late', label: '지각', short: '지' },
   { value: 'absent', label: '결석', short: '결' },
   { value: 'excused', label: '병결', short: '병' },
+]
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: 'card', label: '카드' },
+  { value: 'qr', label: 'QR결제' },
+  { value: 'transfer', label: '계좌이체' },
+  { value: 'cash', label: '현금' },
 ]
 
 type BulkStudentRow = {
@@ -2087,15 +2095,24 @@ type PaymentDraft = {
   status: PaymentStatus
   amount: string
   dueDate: string
+  paymentPartAmounts: Record<PaymentMethod, string>
 }
 
-function paymentDraftsForMonth(students: Student[], records: PaymentRecord[], month: string): Record<string, PaymentDraft> {
+function emptyPaymentPartAmounts(): Record<PaymentMethod, string> {
+  return { card: '', qr: '', transfer: '', cash: '' }
+}
+
+function paymentDraftsForMonth(students: Student[], lessons: Lesson[], records: PaymentRecord[], month: string): Record<string, PaymentDraft> {
   return Object.fromEntries(students.map((student) => {
     const record = records.find((item) => item.studentId === student.id && item.month === month)
+    const defaultAmount = getDefaultTuition(student, lessons)
+    const paymentPartAmounts = emptyPaymentPartAmounts()
+    record?.paymentParts.forEach((part) => { paymentPartAmounts[part.method] = String(part.amount) })
     return [student.id, {
       status: record?.status ?? 'unpaid',
-      amount: record ? String(record.amount) : '',
+      amount: record ? String(record.amount) : defaultAmount > 0 ? String(defaultAmount) : '',
       dueDate: record?.dueDate ?? '',
+      paymentPartAmounts,
     }]
   }))
 }
@@ -2104,8 +2121,95 @@ function formatWon(amount: number): string {
   return `${new Intl.NumberFormat('ko-KR').format(amount)}원`
 }
 
+function paymentPartTotal(partAmounts: Record<PaymentMethod, string>): number {
+  return PAYMENT_METHODS.reduce((total, method) => {
+    const amount = Number(partAmounts[method.value])
+    return total + (Number.isFinite(amount) && amount > 0 ? amount : 0)
+  }, 0)
+}
+
+function PaymentMethodModal({
+  student,
+  tuitionAmount,
+  partAmounts,
+  onClose,
+  onApply,
+}: {
+  student: Student
+  tuitionAmount: string
+  partAmounts: Record<PaymentMethod, string>
+  onClose: () => void
+  onApply: (partAmounts: Record<PaymentMethod, string>) => void
+}) {
+  const [amounts, setAmounts] = useState(() => ({ ...partAmounts }))
+  const [error, setError] = useState('')
+  const tuition = Number(tuitionAmount)
+  const total = paymentPartTotal(amounts)
+  const remaining = Number.isFinite(tuition) && tuition > 0 ? tuition - total : null
+  const apply = (event: FormEvent) => {
+    event.preventDefault()
+    const invalid = PAYMENT_METHODS.some((method) => {
+      const value = amounts[method.value]
+      const amount = Number(value)
+      return value.trim() !== '' && (!Number.isInteger(amount) || amount < 0)
+    })
+    if (invalid) {
+      setError('결제방법별 금액을 원 단위 숫자로 입력해 주세요.')
+      return
+    }
+    if (remaining !== null && remaining < 0) {
+      setError(`결제방법 합계가 원비보다 ${formatWon(Math.abs(remaining))} 많습니다.`)
+      return
+    }
+    onApply(amounts)
+  }
+
+  return (
+    <ModalFrame title="결제방법 설정" eyebrow={`${student.name} · 분할 결제 가능`} onClose={onClose}>
+      <form onSubmit={apply}>
+        <div className="modal-body payment-method-modal-body">
+          <section className="payment-method-summary">
+            <div><span>원비</span><strong>{Number.isFinite(tuition) && tuition > 0 ? formatWon(tuition) : '미입력'}</strong></div>
+            <div><span>입력 합계</span><strong>{formatWon(total)}</strong></div>
+            <div className={remaining !== null && remaining !== 0 ? 'needs-payment' : ''}><span>남은 금액</span><strong>{remaining === null ? '—' : formatWon(Math.max(0, remaining))}</strong></div>
+          </section>
+          <p className="payment-method-help">한 가지 방법만 입력하거나 여러 결제방법의 금액을 나눠 입력할 수 있습니다.</p>
+          <div className="payment-method-list">
+            {PAYMENT_METHODS.map((method) => (
+              <label key={method.value}>
+                <span>{method.label}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  inputMode="numeric"
+                  value={amounts[method.value]}
+                  onChange={(event) => {
+                    setAmounts((current) => ({ ...current, [method.value]: event.target.value }))
+                    setError('')
+                  }}
+                  placeholder="0"
+                  aria-label={`${student.name} ${method.label} 결제금액`}
+                />
+                <small>원</small>
+              </label>
+            ))}
+          </div>
+          {error && <p className="form-error" role="alert">{error}</p>}
+        </div>
+        <footer className="modal-footer">
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onClose}>취소</button>
+          <button type="submit" className="button primary">결제방법 적용</button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function PaymentManagementPage({
   students,
+  lessons,
   records,
   sortMode,
   onSortModeChange,
@@ -2113,6 +2217,7 @@ function PaymentManagementPage({
   onOpenStudent,
 }: {
   students: Student[]
+  lessons: Lesson[]
   records: PaymentRecord[]
   sortMode: StudentSortMode
   onSortModeChange: (mode: StudentSortMode) => void
@@ -2121,15 +2226,16 @@ function PaymentManagementPage({
 }) {
   const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
   const [query, setQuery] = useState('')
-  const [drafts, setDrafts] = useState<Record<string, PaymentDraft>>(() => paymentDraftsForMonth(students, records, month))
+  const [drafts, setDrafts] = useState<Record<string, PaymentDraft>>(() => paymentDraftsForMonth(students, lessons, records, month))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<string>>(() => new Set())
+  const [methodEditorStudentId, setMethodEditorStudentId] = useState<string | null>(null)
 
   useEffect(() => {
-    setDrafts(paymentDraftsForMonth(students, records, month))
+    setDrafts(paymentDraftsForMonth(students, lessons, records, month))
     setErrors({})
     setDirtyStudentIds(new Set())
-  }, [month, students])
+  }, [lessons, month, students])
 
   const filteredStudents = sortStudents(students.filter((student) => (
     matchesKoreanSearch(student.name, query)
@@ -2143,13 +2249,14 @@ function PaymentManagementPage({
   const paidAmount = students.reduce((total, student) => {
     const draft = drafts[student.id]
     const amount = Number(draft?.amount)
-    return total + (draft?.status === 'paid' && Number.isFinite(amount) && amount >= 0 ? amount : 0)
+    const allocated = draft ? paymentPartTotal(draft.paymentPartAmounts) : 0
+    return total + (allocated > 0 ? allocated : draft?.status === 'paid' && Number.isFinite(amount) && amount >= 0 ? amount : 0)
   }, 0)
 
   const updateDraft = (studentId: string, patch: Partial<PaymentDraft>) => {
     setDrafts((current) => ({
       ...current,
-      [studentId]: { status: 'unpaid', amount: '', dueDate: '', ...current[studentId], ...patch },
+      [studentId]: { status: 'unpaid', amount: '', dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts(), ...current[studentId], ...patch },
     }))
     setErrors((current) => ({ ...current, [studentId]: '' }))
     setDirtyStudentIds((current) => new Set(current).add(studentId))
@@ -2166,13 +2273,29 @@ function PaymentManagementPage({
       setErrors((current) => ({ ...current, [student.id]: '결제일을 입력해 주세요.' }))
       return
     }
+    const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
+    if (allocatedAmount > amount) {
+      setErrors((current) => ({ ...current, [student.id]: `결제방법 합계가 원비보다 ${formatWon(allocatedAmount - amount)} 많습니다.` }))
+      return
+    }
+    if (draft.status === 'paid' && allocatedAmount !== amount) {
+      setErrors((current) => ({ ...current, [student.id]: `납부 처리하려면 결제방법 합계가 ${formatWon(amount)}이어야 합니다.` }))
+      return
+    }
+    const paymentId = paymentRecordId(student.id, month)
     onSave({
-      id: paymentRecordId(student.id, month),
+      id: paymentId,
       studentId: student.id,
       month,
       status: draft.status,
       amount,
       dueDate: draft.dueDate,
+      paymentParts: PAYMENT_METHODS.flatMap((method) => {
+        const partAmount = Number(draft.paymentPartAmounts[method.value])
+        return Number.isInteger(partAmount) && partAmount > 0
+          ? [{ id: `${paymentId}:${method.value}`, method: method.value, amount: partAmount }]
+          : []
+      }),
       updatedAt: new Date().toISOString(),
     })
     setDirtyStudentIds((current) => {
@@ -2194,11 +2317,21 @@ function PaymentManagementPage({
         <StudentSortControl mode={sortMode} onChange={onSortModeChange} />
       </header>
 
+      <div className="tuition-defaults" aria-label="기본 원비 안내">
+        <strong>기본 원비</strong>
+        <span>초등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.elementaryMath)}</span>
+        <span>중등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.middleMath)}</span>
+        <span>고등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.highMath)}</span>
+        <span>중등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.middleKorean)}</span>
+        <span>고등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.highKorean)}</span>
+        <small>학년과 등록된 수업명의 수학·국어를 기준으로 자동 입력됩니다. 두 과목 수강 시 합산됩니다.</small>
+      </div>
+
       <div className="attendance-summary-cards payment-summary-cards">
         <article><span>납부 완료</span><strong>{paidCount}</strong><small>{students.length}명 중</small></article>
         <article className={students.length - paidCount > 0 ? 'needs-check' : ''}><span>미납</span><strong>{students.length - paidCount}</strong><small>{students.length - paidCount > 0 ? '확인 필요' : '모두 납부'}</small></article>
         <article><span>결제 예정액</span><strong>{formatWon(expectedAmount)}</strong><small>입력된 금액 합계</small></article>
-        <article><span>실제 납부액</span><strong>{formatWon(paidAmount)}</strong><small>납부 완료 합계</small></article>
+        <article><span>결제 입력액</span><strong>{formatWon(paidAmount)}</strong><small>결제방법별 합계</small></article>
       </div>
 
       <section className="payment-table-card">
@@ -2209,12 +2342,14 @@ function PaymentManagementPage({
         <div className="payment-table-scroll">
           <table className="payment-table">
             <thead>
-              <tr><th>학생</th><th>상태</th><th>결제금액</th><th>결제일</th><th>저장</th></tr>
+              <tr><th>학생</th><th>상태</th><th>원비</th><th>결제일</th><th>결제방법</th><th>저장</th></tr>
             </thead>
             <tbody>
               {filteredStudents.map((student) => {
-                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '' }
+                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts() }
                 const savedRecord = records.find((record) => record.studentId === student.id && record.month === month)
+                const selectedMethods = PAYMENT_METHODS.filter((method) => Number(draft.paymentPartAmounts[method.value]) > 0)
+                const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
                 return (
                   <tr key={student.id}>
                     <td>
@@ -2232,6 +2367,15 @@ function PaymentManagementPage({
                     <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
                     <td><label className="payment-field"><span className="sr-only">{student.name} 결제일</span><input type="date" value={draft.dueDate} onChange={(event) => updateDraft(student.id, { dueDate: event.target.value })} /></label></td>
                     <td>
+                      <div className="payment-method-cell">
+                        {selectedMethods.length > 0 ? (
+                          <div className="payment-method-chips">{selectedMethods.map((method) => <span key={method.value}>{method.label} {formatWon(Number(draft.paymentPartAmounts[method.value]))}</span>)}</div>
+                        ) : <small>미입력</small>}
+                        <button type="button" onClick={() => setMethodEditorStudentId(student.id)}>{selectedMethods.length > 0 ? '수정' : '입력'}</button>
+                        {allocatedAmount > 0 && <em>합계 {formatWon(allocatedAmount)}</em>}
+                      </div>
+                    </td>
+                    <td>
                       <button type="button" className="button primary payment-save-button" onClick={() => save(student)}><Check size={14} /> 저장</button>
                       {errors[student.id] && <small className="payment-row-error" role="alert">{errors[student.id]}</small>}
                       {!errors[student.id] && savedRecord && !dirtyStudentIds.has(student.id) && <small className="payment-saved-at">저장됨</small>}
@@ -2240,11 +2384,33 @@ function PaymentManagementPage({
                   </tr>
                 )
               })}
-              {filteredStudents.length === 0 && <tr><td colSpan={5} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
+              {filteredStudents.length === 0 && <tr><td colSpan={6} className="attendance-report-empty">검색 조건에 맞는 학생이 없습니다.</td></tr>}
             </tbody>
           </table>
         </div>
       </section>
+      {methodEditorStudentId && (() => {
+        const student = studentById(students, methodEditorStudentId)
+        const draft = drafts[methodEditorStudentId]
+        if (!student || !draft) return null
+        return (
+          <PaymentMethodModal
+            student={student}
+            tuitionAmount={draft.amount}
+            partAmounts={draft.paymentPartAmounts}
+            onClose={() => setMethodEditorStudentId(null)}
+            onApply={(paymentPartAmounts) => {
+              const total = paymentPartTotal(paymentPartAmounts)
+              const tuition = Number(draft.amount)
+              updateDraft(student.id, {
+                paymentPartAmounts,
+                status: Number.isFinite(tuition) && tuition > 0 && total === tuition ? 'paid' : 'unpaid',
+              })
+              setMethodEditorStudentId(null)
+            }}
+          />
+        )
+      })()}
     </section>
   )
 }
@@ -3251,6 +3417,7 @@ export default function App() {
         ) : view === 'payments' ? (
           <PaymentManagementPage
             students={appState.students}
+            lessons={appState.lessons}
             records={appState.paymentRecords}
             sortMode={studentSortMode}
             onSortModeChange={setStudentSortMode}

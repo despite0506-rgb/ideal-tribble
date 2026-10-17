@@ -2,6 +2,7 @@ export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type TeacherId = 'teacher-1' | 'teacher-2' | 'teacher-3'
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'excused'
 export type PaymentStatus = 'paid' | 'unpaid'
+export type PaymentMethod = 'card' | 'qr' | 'transfer' | 'cash'
 
 export type Transport = {
   arrivalRide: boolean
@@ -78,7 +79,14 @@ export type PaymentRecord = {
   status: PaymentStatus
   amount: number
   dueDate: string
+  paymentParts: PaymentPart[]
   updatedAt: string
+}
+
+export type PaymentPart = {
+  id: string
+  method: PaymentMethod
+  amount: number
 }
 
 export type AppState = {
