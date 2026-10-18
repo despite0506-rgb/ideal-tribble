@@ -371,6 +371,11 @@ describe('저장 데이터 검증', () => {
     expect(validateState({ ...validState, lessons: [lesson('large-group', ['a', 'b', 'c'], 700, 760)] })).toBe(true)
   })
 
+  it('가족 그룹 연결을 허용하고 빈 가족 id는 거절한다', () => {
+    expect(validateState({ ...validState, students: students.map((item, index) => index < 2 ? { ...item, familyId: 'family-one' } : item) })).toBe(true)
+    expect(validateState({ ...validState, students: [{ ...students[0]!, familyId: '' }, ...students.slice(1)] })).toBe(false)
+  })
+
   it('연결이 끊긴 학생 참조와 중복 id를 거절한다', () => {
     expect(validateState({ ...validState, lessons: [lesson('orphan', ['missing'], 600, 660)] })).toBe(false)
     expect(validateState({ ...validState, students: [students[0], students[0]] })).toBe(false)
@@ -413,6 +418,7 @@ describe('저장 데이터 검증', () => {
       amount: 320000,
       dueDate: '2026-10-10',
       paymentParts: [{ id: 'payment:a:2026-10:card', method: 'card' as const, amount: 320000 }],
+      familyPaymentId: 'family-payment-one',
       updatedAt: '2026-10-09T10:00:00.000Z',
     }]
     expect(validateState({ ...validState, paymentRecords })).toBe(true)
@@ -427,5 +433,6 @@ describe('저장 데이터 검증', () => {
         ],
       }],
     })).toBe(false)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], familyPaymentId: '' }] })).toBe(false)
   })
 })

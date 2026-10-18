@@ -446,6 +446,7 @@ export function validateState(value: unknown): value is AppState {
   for (const student of state.students) {
     if (!student || typeof student !== 'object') return false
     if (typeof student.id !== 'string' || typeof student.name !== 'string' || student.name.trim() === '') return false
+    if (student.familyId !== undefined && (typeof student.familyId !== 'string' || student.familyId.trim() === '')) return false
     if (studentIds.has(student.id)) return false
     studentIds.add(student.id)
   }
@@ -526,6 +527,7 @@ export function validateState(value: unknown): value is AppState {
           if (!Number.isInteger(part.amount) || part.amount <= 0) return false
         }
       }
+      if (payment.familyPaymentId !== undefined && (typeof payment.familyPaymentId !== 'string' || payment.familyPaymentId.trim() === '')) return false
       if (typeof payment.updatedAt !== 'string') return false
     }
   }

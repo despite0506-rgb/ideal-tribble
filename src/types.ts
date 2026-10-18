@@ -23,6 +23,7 @@ export type Student = {
   name: string
   school: string
   grade: string
+  familyId?: string
   color: string
   defaultTransport: Transport
   notionUrl: string
@@ -80,6 +81,7 @@ export type PaymentRecord = {
   amount: number
   dueDate: string
   paymentParts: PaymentPart[]
+  familyPaymentId?: string
   updatedAt: string
 }
 

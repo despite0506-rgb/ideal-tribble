@@ -39,6 +39,25 @@ describe('저장 자료 호환성', () => {
     expect(parseAppState(legacyState)?.paymentRecords[0]).toMatchObject({ paymentParts: [] })
     expect(parseAppState(legacyState)?.paymentRecords[0]).not.toHaveProperty('paidDate')
   })
+
+  it('가족 연결과 가족 합산 결제 식별자를 보존한다', () => {
+    const state = structuredClone(DEMO_STATE)
+    state.students[0]!.familyId = 'family-one'
+    state.students[1]!.familyId = 'family-one'
+    state.paymentRecords.push({
+      id: `payment:${state.students[0]!.id}:2026-10`,
+      studentId: state.students[0]!.id,
+      month: '2026-10',
+      status: 'paid',
+      amount: 200000,
+      dueDate: '2026-10-10',
+      paymentParts: [{ id: 'part-one', method: 'transfer', amount: 200000 }],
+      familyPaymentId: 'family-payment-one',
+      updatedAt: '2026-10-10T10:00:00.000Z',
+    })
+    expect(parseAppState(state)?.students.slice(0, 2).every((student) => student.familyId === 'family-one')).toBe(true)
+    expect(parseAppState(state)?.paymentRecords[0]?.familyPaymentId).toBe('family-payment-one')
+  })
 })
 
 describe('시간표 설정', () => {

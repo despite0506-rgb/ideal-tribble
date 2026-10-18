@@ -23,6 +23,7 @@ export const normalizeState = (state: AppState): AppState => ({
   ...state,
   students: state.students.map((student) => ({
     ...student,
+    familyId: typeof student.familyId === 'string' && student.familyId ? student.familyId : undefined,
     notionUrl: typeof student.notionUrl === 'string' ? student.notionUrl : '',
     feedbacks: Array.isArray(student.feedbacks) ? student.feedbacks : [],
   })),
@@ -45,6 +46,7 @@ export const normalizeState = (state: AppState): AppState => ({
     amount: record.amount,
     dueDate: record.dueDate,
     paymentParts: Array.isArray(record.paymentParts) ? record.paymentParts : [],
+    familyPaymentId: typeof record.familyPaymentId === 'string' && record.familyPaymentId ? record.familyPaymentId : undefined,
     updatedAt: record.updatedAt,
   })) : [],
 })

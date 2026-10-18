@@ -847,6 +847,7 @@ function StudentModal({
       name: name.trim(),
       school: school.trim(),
       grade: grade.trim(),
+      familyId: student?.familyId,
       color,
       defaultTransport: transport,
       notionUrl: notionUrl.trim(),
@@ -2128,6 +2129,15 @@ function paymentPartTotal(partAmounts: Record<PaymentMethod, string>): number {
   }, 0)
 }
 
+function familyGroupsFromStudents(students: Student[]): Student[][] {
+  const groups = new Map<string, Student[]>()
+  students.forEach((student) => {
+    if (!student.familyId) return
+    groups.set(student.familyId, [...(groups.get(student.familyId) ?? []), student])
+  })
+  return [...groups.values()].filter((members) => members.length > 1)
+}
+
 function PaymentMethodModal({
   student,
   tuitionAmount,
@@ -2207,6 +2217,144 @@ function PaymentMethodModal({
   )
 }
 
+function FamilyPaymentModal({
+  students,
+  month,
+  drafts,
+  records,
+  onClose,
+  onApply,
+}: {
+  students: Student[]
+  month: string
+  drafts: Record<string, PaymentDraft>
+  records: PaymentRecord[]
+  onClose: () => void
+  onApply: (records: PaymentRecord[]) => void
+}) {
+  const relevantRecords = records.filter((record) => record.month === month && students.some((student) => student.id === record.studentId))
+  const [dueDate, setDueDate] = useState(() => relevantRecords.find((record) => record.dueDate)?.dueDate ?? dateToInputValue(new Date()))
+  const [allocations, setAllocations] = useState<Record<string, string>>(() => Object.fromEntries(students.map((student) => {
+    const draft = drafts[student.id]
+    const alreadyAllocated = draft ? paymentPartTotal(draft.paymentPartAmounts) : 0
+    return [student.id, String(alreadyAllocated > 0 ? alreadyAllocated : Number(draft?.amount) || 0)]
+  })))
+  const [methodAmounts, setMethodAmounts] = useState<Record<PaymentMethod, string>>(() => {
+    const amounts = emptyPaymentPartAmounts()
+    relevantRecords.forEach((record) => record.paymentParts.forEach((part) => {
+      amounts[part.method] = String((Number(amounts[part.method]) || 0) + part.amount)
+    }))
+    return amounts
+  })
+  const [error, setError] = useState('')
+  const tuitionTotal = students.reduce((total, student) => total + (Number(drafts[student.id]?.amount) || 0), 0)
+  const allocationTotal = students.reduce((total, student) => total + (Number(allocations[student.id]) || 0), 0)
+  const methodTotal = paymentPartTotal(methodAmounts)
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (!dueDate) {
+      setError('결제일을 입력해 주세요.')
+      return
+    }
+    for (const student of students) {
+      const tuition = Number(drafts[student.id]?.amount)
+      const allocation = Number(allocations[student.id])
+      if (!Number.isInteger(tuition) || tuition < 0 || !Number.isInteger(allocation) || allocation < 0 || allocation > tuition) {
+        setError(`${student.name} 학생의 배분액은 0원부터 개인 원비까지 입력할 수 있습니다.`)
+        return
+      }
+    }
+    if (allocationTotal <= 0) {
+      setError('가족 결제금액을 한 명 이상에게 배분해 주세요.')
+      return
+    }
+    if (methodTotal !== allocationTotal) {
+      setError(`결제방법 합계와 학생별 배분 합계가 같아야 합니다. 현재 ${formatWon(Math.abs(methodTotal - allocationTotal))} 차이입니다.`)
+      return
+    }
+
+    const familyPaymentId = relevantRecords.find((record) => record.familyPaymentId)?.familyPaymentId ?? createId('family-payment')
+    const remainingByStudent = new Map(students.map((student) => [student.id, Number(allocations[student.id]) || 0]))
+    const partsByStudent = new Map(students.map((student) => [student.id, [] as PaymentRecord['paymentParts']]))
+    PAYMENT_METHODS.forEach((method) => {
+      let methodRemaining = Number(methodAmounts[method.value]) || 0
+      students.forEach((student) => {
+        if (methodRemaining <= 0) return
+        const studentRemaining = remainingByStudent.get(student.id) ?? 0
+        const amount = Math.min(methodRemaining, studentRemaining)
+        if (amount <= 0) return
+        const paymentId = paymentRecordId(student.id, month)
+        partsByStudent.get(student.id)?.push({ id: `${paymentId}:${method.value}`, method: method.value, amount })
+        remainingByStudent.set(student.id, studentRemaining - amount)
+        methodRemaining -= amount
+      })
+    })
+    const updatedAt = new Date().toISOString()
+    onApply(students.map((student) => {
+      const amount = Number(drafts[student.id]?.amount) || 0
+      const allocated = Number(allocations[student.id]) || 0
+      return {
+        id: paymentRecordId(student.id, month),
+        studentId: student.id,
+        month,
+        status: amount > 0 && allocated === amount ? 'paid' : 'unpaid',
+        amount,
+        dueDate,
+        paymentParts: partsByStudent.get(student.id) ?? [],
+        familyPaymentId,
+        updatedAt,
+      }
+    }))
+  }
+
+  return (
+    <ModalFrame title="가족 합산 결제" eyebrow={`${students.map((student) => student.name).join(' · ')} · ${koreanMonthLabel(month)}`} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="modal-body family-payment-modal-body">
+          <p className="payment-method-help">학생별 원비는 그대로 유지됩니다. 이번에 낸 금액을 각 학생에게 배분하면 개인별 납부 여부가 자동 결정됩니다.</p>
+          <section className="payment-method-summary">
+            <div><span>가족 원비 합계</span><strong>{formatWon(tuitionTotal)}</strong></div>
+            <div><span>학생별 배분</span><strong>{formatWon(allocationTotal)}</strong></div>
+            <div className={methodTotal !== allocationTotal ? 'needs-payment' : ''}><span>결제 입력 합계</span><strong>{formatWon(methodTotal)}</strong></div>
+          </section>
+          <label className="field family-payment-date"><span>결제일</span><input type="date" value={dueDate} onChange={(event) => { setDueDate(event.target.value); setError('') }} /></label>
+          <fieldset className="family-allocation-list">
+            <legend>학생별 배분</legend>
+            {students.map((student) => {
+              const tuition = Number(drafts[student.id]?.amount) || 0
+              const allocated = Number(allocations[student.id]) || 0
+              return (
+                <label key={student.id}>
+                  <Avatar student={student} size="sm" />
+                  <span><strong>{student.name}</strong><small>{student.school} · {student.grade} / 원비 {formatWon(tuition)}</small></span>
+                  <input type="number" min="0" max={tuition} step="1000" value={allocations[student.id]} onChange={(event) => { setAllocations((current) => ({ ...current, [student.id]: event.target.value })); setError('') }} aria-label={`${student.name} 배분액`} />
+                  <small>원</small>
+                  <em className={tuition > 0 && allocated === tuition ? 'paid' : ''}>{tuition > 0 && allocated === tuition ? '납부' : `미납 ${formatWon(Math.max(0, tuition - allocated))}`}</em>
+                </label>
+              )
+            })}
+          </fieldset>
+          <fieldset className="family-method-list">
+            <legend>실제 결제방법</legend>
+            <div className="payment-method-list">
+              {PAYMENT_METHODS.map((method) => (
+                <label key={method.value}>
+                  <span>{method.label}</span>
+                  <input type="number" min="0" step="1000" value={methodAmounts[method.value]} onChange={(event) => { setMethodAmounts((current) => ({ ...current, [method.value]: event.target.value })); setError('') }} placeholder="0" aria-label={`가족 ${method.label} 결제금액`} />
+                  <small>원</small>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {error && <p className="form-error" role="alert">{error}</p>}
+        </div>
+        <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary">가족 결제 저장</button></footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
 function PaymentManagementPage({
   students,
   lessons,
@@ -2214,6 +2362,7 @@ function PaymentManagementPage({
   sortMode,
   onSortModeChange,
   onSave,
+  onSaveMany,
   onOpenStudent,
 }: {
   students: Student[]
@@ -2222,6 +2371,7 @@ function PaymentManagementPage({
   sortMode: StudentSortMode
   onSortModeChange: (mode: StudentSortMode) => void
   onSave: (record: PaymentRecord) => void
+  onSaveMany: (records: PaymentRecord[]) => void
   onOpenStudent: (studentId: string) => void
 }) {
   const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
@@ -2230,17 +2380,19 @@ function PaymentManagementPage({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<string>>(() => new Set())
   const [methodEditorStudentId, setMethodEditorStudentId] = useState<string | null>(null)
+  const [familyPaymentId, setFamilyPaymentId] = useState<string | null>(null)
 
   useEffect(() => {
     setDrafts(paymentDraftsForMonth(students, lessons, records, month))
     setErrors({})
     setDirtyStudentIds(new Set())
-  }, [lessons, month, students])
+  }, [lessons, month, records, students])
 
   const filteredStudents = sortStudents(students.filter((student) => (
     matchesKoreanSearch(student.name, query)
     || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))
   )), sortMode)
+  const familyGroups = familyGroupsFromStudents(students)
   const paidCount = students.filter((student) => drafts[student.id]?.status === 'paid').length
   const expectedAmount = students.reduce((total, student) => {
     const amount = Number(drafts[student.id]?.amount)
@@ -2327,6 +2479,17 @@ function PaymentManagementPage({
         <small>학년과 등록된 수업명의 수학·국어를 기준으로 자동 입력됩니다. 두 과목 수강 시 합산됩니다.</small>
       </div>
 
+      {familyGroups.length > 0 && (
+        <section className="family-payment-groups" aria-label="가족 합산 결제">
+          <header><div><UsersRound size={17} /><strong>가족 합산 결제</strong></div><small>학생별 원비와 납부 상태는 따로 유지됩니다.</small></header>
+          <div>{familyGroups.map((members) => (
+            <button type="button" key={members[0]?.familyId} onClick={() => setFamilyPaymentId(members[0]?.familyId ?? null)}>
+              <span>{members.map((member) => member.name).join(' · ')}</span><strong>{formatWon(members.reduce((total, member) => total + (Number(drafts[member.id]?.amount) || 0), 0))}</strong><em>합산 결제 →</em>
+            </button>
+          ))}</div>
+        </section>
+      )}
+
       <div className="attendance-summary-cards payment-summary-cards">
         <article><span>납부 완료</span><strong>{paidCount}</strong><small>{students.length}명 중</small></article>
         <article className={students.length - paidCount > 0 ? 'needs-check' : ''}><span>미납</span><strong>{students.length - paidCount}</strong><small>{students.length - paidCount > 0 ? '확인 필요' : '모두 납부'}</small></article>
@@ -2357,6 +2520,7 @@ function PaymentManagementPage({
                         <Avatar student={student} size="sm" />
                         <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
                       </button>
+                      {student.familyId && <small className="family-linked-badge">가족 연결</small>}
                     </td>
                     <td>
                       <div className="payment-status-switch" role="group" aria-label={`${student.name} 결제 상태`}>
@@ -2411,7 +2575,85 @@ function PaymentManagementPage({
           />
         )
       })()}
+      {familyPaymentId && (() => {
+        const familyStudents = students.filter((student) => student.familyId === familyPaymentId)
+        if (familyStudents.length < 2) return null
+        return <FamilyPaymentModal students={familyStudents} month={month} drafts={drafts} records={records} onClose={() => setFamilyPaymentId(null)} onApply={(savedRecords) => {
+          onSaveMany(savedRecords)
+          setDrafts((current) => {
+            const next = { ...current }
+            savedRecords.forEach((record) => {
+              const paymentPartAmounts = emptyPaymentPartAmounts()
+              record.paymentParts.forEach((part) => { paymentPartAmounts[part.method] = String(part.amount) })
+              next[record.studentId] = { status: record.status, amount: String(record.amount), dueDate: record.dueDate, paymentPartAmounts }
+            })
+            return next
+          })
+          setDirtyStudentIds((current) => {
+            const next = new Set(current)
+            savedRecords.forEach((record) => next.delete(record.studentId))
+            return next
+          })
+          setFamilyPaymentId(null)
+        }} />
+      })()}
     </section>
+  )
+}
+
+function FamilyLinkModal({
+  student,
+  students,
+  onClose,
+  onSave,
+}: {
+  student: Student
+  students: Student[]
+  onClose: () => void
+  onSave: (memberIds: string[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(
+    students.filter((item) => item.id !== student.id && student.familyId && item.familyId === student.familyId).map((item) => item.id),
+  ))
+  const candidates = sortStudents(students.filter((item) => item.id !== student.id && (
+    matchesKoreanSearch(item.name, query)
+    || `${item.school} ${item.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))
+  )), 'name')
+  const toggle = (studentId: string) => setSelectedIds((current) => {
+    const next = new Set(current)
+    if (next.has(studentId)) next.delete(studentId)
+    else next.add(studentId)
+    return next
+  })
+
+  return (
+    <ModalFrame title="형제·자매 연결" eyebrow={`${student.name} 가족 그룹`} onClose={onClose}>
+      <form onSubmit={(event) => { event.preventDefault(); onSave([...selectedIds]) }}>
+        <div className="modal-body family-link-modal-body">
+          <div className="family-link-guide"><UsersRound size={18} /><p>같이 결제할 형제·자매를 선택하세요. 학년과 수강과목, 개인 원비는 합쳐지지 않고 각각 유지됩니다.</p></div>
+          <label className="page-search"><Search size={16} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름·초성·학교·학년 검색" aria-label="가족으로 연결할 학생 검색" /></label>
+          <div className="family-candidate-list">
+            {candidates.map((candidate) => {
+              const selected = selectedIds.has(candidate.id)
+              const belongsElsewhere = Boolean(candidate.familyId && candidate.familyId !== student.familyId)
+              return (
+                <label key={candidate.id} className={selected ? 'selected' : ''}>
+                  <input type="checkbox" checked={selected} onChange={() => toggle(candidate.id)} />
+                  <Avatar student={candidate} size="sm" />
+                  <span><strong>{candidate.name}</strong><small>{candidate.school} · {candidate.grade}</small></span>
+                  {belongsElsewhere && <em>다른 가족에서 이동</em>}
+                  {selected && <Check size={16} aria-hidden="true" />}
+                </label>
+              )
+            })}
+            {candidates.length === 0 && <div className="detail-empty compact">검색 조건에 맞는 학생이 없습니다.</div>}
+          </div>
+          {selectedIds.size === 0 && student.familyId && <p className="family-unlink-note">저장하면 현재 가족 연결이 해제됩니다. 기존 결제 기록은 그대로 남습니다.</p>}
+        </div>
+        <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary">{selectedIds.size > 0 ? `${selectedIds.size + 1}명 가족으로 저장` : '가족 연결 해제'}</button></footer>
+      </form>
+    </ModalFrame>
   )
 }
 
@@ -2427,6 +2669,8 @@ function StudentDetail({
   onOpenLesson,
   onAddFeedback,
   onDeleteFeedback,
+  onSaveFamily,
+  onOpenStudent,
   onNotice,
 }: {
   student: Student
@@ -2440,12 +2684,16 @@ function StudentDetail({
   onOpenLesson: (lessonId: string) => void
   onAddFeedback: (feedback: FeedbackEntry) => void
   onDeleteFeedback: (feedbackId: string) => void
+  onSaveFamily: (memberIds: string[]) => void
+  onOpenStudent: (studentId: string) => void
   onNotice: (message: string) => void
 }) {
   const [feedbackDate, setFeedbackDate] = useState(new Date().toISOString().slice(0, 10))
   const [feedbackContent, setFeedbackContent] = useState('')
+  const [familyModalOpen, setFamilyModalOpen] = useState(false)
   const feedbacks = [...student.feedbacks].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
   const groupLessons = lessons.filter((lesson) => lesson.kind === 'group')
+  const familyMembers = student.familyId ? allStudents.filter((item) => item.familyId === student.familyId) : []
 
   const submitFeedback = (event: FormEvent) => {
     event.preventDefault()
@@ -2494,10 +2742,20 @@ function StudentDetail({
         </div>
         <div className="student-detail-actions">
           {student.notionUrl && <a className="button notion-button" href={student.notionUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Notion 열기</a>}
+          <button type="button" className="button secondary" onClick={() => setFamilyModalOpen(true)}><UsersRound size={15} /> {familyMembers.length > 1 ? '가족 관리' : '가족 연결'}</button>
           <button type="button" className="button secondary" onClick={onEdit}><Pencil size={15} /> 정보 수정</button>
           <button type="button" className="button primary" onClick={onAddLesson}><Plus size={15} /> 수업 추가</button>
         </div>
       </div>
+
+      {familyMembers.length > 1 && (
+        <section className="student-family-strip">
+          <div><UsersRound size={17} /><span><strong>가족 그룹</strong><small>결제 화면에서 합산 결제할 수 있습니다.</small></span></div>
+          <div>{familyMembers.map((member) => (
+            <button type="button" key={member.id} className={member.id === student.id ? 'current' : ''} onClick={() => member.id !== student.id && onOpenStudent(member.id)}><Avatar student={member} size="sm" /><span>{member.name}<small>{member.grade}</small></span></button>
+          ))}</div>
+        </section>
+      )}
 
       <div className={`student-detail-stats${transportEnabled ? '' : ' without-transport'}`}>
         <div><strong>{lessons.length}</strong><span>주간 수업</span></div>
@@ -2562,6 +2820,7 @@ function StudentDetail({
           )}
         </section>
       </div>
+      {familyModalOpen && <FamilyLinkModal student={student} students={allStudents} onClose={() => setFamilyModalOpen(false)} onSave={(memberIds) => { onSaveFamily(memberIds); setFamilyModalOpen(false) }} />}
     </section>
   )
 }
@@ -2861,6 +3120,40 @@ export default function App() {
     setNotice(`${student?.name ?? '학생'}의 ${koreanMonthLabel(payment.month)} 결제 정보를 저장했습니다.`)
   }
 
+  const saveFamilyPayments = (payments: PaymentRecord[]) => {
+    const savedIds = new Set(payments.map((payment) => payment.id))
+    setAppState((current) => ({
+      ...current,
+      paymentRecords: [...current.paymentRecords.filter((record) => !savedIds.has(record.id)), ...payments],
+    }))
+    setNotice(`${payments.map((payment) => studentById(appState.students, payment.studentId)?.name).filter(Boolean).join(' · ')} 가족의 ${koreanMonthLabel(payments[0]?.month ?? '')} 결제를 저장했습니다.`)
+  }
+
+  const saveFamilyLinks = (studentId: string, memberIds: string[]) => {
+    setAppState((current) => {
+      const target = studentById(current.students, studentId)
+      if (!target) return current
+      const linkedIds = new Set([studentId, ...memberIds])
+      const nextFamilyId = memberIds.length > 0 ? (target.familyId ?? createId('family')) : undefined
+      const relinked = current.students.map((student) => {
+        if (linkedIds.has(student.id)) return { ...student, familyId: nextFamilyId }
+        if (target.familyId && student.familyId === target.familyId) return { ...student, familyId: undefined }
+        return student
+      })
+      const familyCounts = new Map<string, number>()
+      relinked.forEach((student) => {
+        if (student.familyId) familyCounts.set(student.familyId, (familyCounts.get(student.familyId) ?? 0) + 1)
+      })
+      return {
+        ...current,
+        students: relinked.map((student) => student.familyId && (familyCounts.get(student.familyId) ?? 0) < 2
+          ? { ...student, familyId: undefined }
+          : student),
+      }
+    })
+    setNotice(memberIds.length > 0 ? '형제·자매를 가족 그룹으로 연결했습니다.' : '가족 연결을 해제했습니다. 기존 결제 기록은 유지됩니다.')
+  }
+
   const saveStudent = (student: Student) => {
     setAppState((current) => ({
       ...current,
@@ -2912,13 +3205,20 @@ export default function App() {
   }
 
   const deleteStudent = (studentId: string) => {
-    setAppState((current) => ({
-      ...current,
-      students: current.students.filter((student) => student.id !== studentId),
-      lessons: current.lessons.filter((lesson) => !lesson.participants.some((participant) => participant.studentId === studentId)),
-      attendanceRecords: current.attendanceRecords.filter((record) => record.studentId !== studentId),
-      paymentRecords: current.paymentRecords.filter((record) => record.studentId !== studentId),
-    }))
+    setAppState((current) => {
+      const remainingStudents = current.students.filter((student) => student.id !== studentId)
+      const familyCounts = new Map<string, number>()
+      remainingStudents.forEach((student) => {
+        if (student.familyId) familyCounts.set(student.familyId, (familyCounts.get(student.familyId) ?? 0) + 1)
+      })
+      return {
+        ...current,
+        students: remainingStudents.map((student) => student.familyId && (familyCounts.get(student.familyId) ?? 0) < 2 ? { ...student, familyId: undefined } : student),
+        lessons: current.lessons.filter((lesson) => !lesson.participants.some((participant) => participant.studentId === studentId)),
+        attendanceRecords: current.attendanceRecords.filter((record) => record.studentId !== studentId),
+        paymentRecords: current.paymentRecords.filter((record) => record.studentId !== studentId),
+      }
+    })
     if (selectedStudentId === studentId) setSelectedStudentId('all')
     if (detailStudentId === studentId) {
       setDetailStudentId(null)
@@ -3422,6 +3722,7 @@ export default function App() {
             sortMode={studentSortMode}
             onSortModeChange={setStudentSortMode}
             onSave={savePayment}
+            onSaveMany={saveFamilyPayments}
             onOpenStudent={showStudentDetail}
           />
         ) : view === 'students' ? (
@@ -3474,6 +3775,8 @@ export default function App() {
             onOpenLesson={setAttendanceModalLessonId}
             onAddFeedback={(feedback) => addFeedback(detailStudent.id, feedback)}
             onDeleteFeedback={(feedbackId) => deleteFeedback(detailStudent.id, feedbackId)}
+            onSaveFamily={(memberIds) => saveFamilyLinks(detailStudent.id, memberIds)}
+            onOpenStudent={showStudentDetail}
             onNotice={setNotice}
           />
         ) : (
