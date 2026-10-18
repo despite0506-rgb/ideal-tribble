@@ -41,6 +41,7 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -3210,6 +3211,8 @@ export default function App() {
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
   const [attendanceModalLessonId, setAttendanceModalLessonId] = useState<string | null>(null)
   const [copiedLessonId, setCopiedLessonId] = useState<string | null>(null)
+  const lessonMoveHistoryRef = useRef<Lesson[]>([])
+  const [canUndoLessonMove, setCanUndoLessonMove] = useState(false)
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
@@ -3252,6 +3255,19 @@ export default function App() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [scheduleFullscreen])
+
+  useEffect(() => {
+    const handleUndoShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (!lessonMoveHistoryRef.current.length) return
+      event.preventDefault()
+      undoLessonMove()
+    }
+    document.addEventListener('keydown', handleUndoShortcut)
+    return () => document.removeEventListener('keydown', handleUndoShortcut)
+  }, [])
 
   const sortedStudents = useMemo(() => sortStudents(appState.students, studentSortMode), [appState.students, studentSortMode])
   const filteredStudents = sortedStudents.filter((student) => {
@@ -3349,8 +3365,20 @@ export default function App() {
       setNotice(`이동할 수 없습니다. ${errors[0]}`)
       return
     }
+    lessonMoveHistoryRef.current = [...lessonMoveHistoryRef.current.slice(-19), lesson]
+    setCanUndoLessonMove(true)
     setAppState((current) => ({ ...current, lessons: current.lessons.map((item) => item.id === lesson.id ? moved : item) }))
     setNotice(`${lesson.label} 수업을 ${WEEKDAYS.find((day) => day.value === weekday)?.long} ${minutesToTime(safeStart)}로 옮겼습니다.`)
+  }
+
+  function undoLessonMove() {
+    const previous = lessonMoveHistoryRef.current.pop()
+    if (!previous) return
+    setAppState((current) => current.lessons.some((lesson) => lesson.id === previous.id)
+      ? { ...current, lessons: current.lessons.map((lesson) => lesson.id === previous.id ? previous : lesson) }
+      : current)
+    setCanUndoLessonMove(lessonMoveHistoryRef.current.length > 0)
+    setNotice(`${previous.label} 수업 이동을 되돌렸습니다.`)
   }
 
   const copyLesson = (lessonId: string) => {
@@ -3361,6 +3389,8 @@ export default function App() {
 
   const deleteLesson = (lessonId: string) => {
     setAppState((current) => ({ ...current, lessons: current.lessons.filter((lesson) => lesson.id !== lessonId) }))
+    lessonMoveHistoryRef.current = lessonMoveHistoryRef.current.filter((lesson) => lesson.id !== lessonId)
+    setCanUndoLessonMove(lessonMoveHistoryRef.current.length > 0)
     setLessonModal({ open: false })
     setNotice('수업을 삭제했습니다.')
   }
@@ -3584,6 +3614,8 @@ export default function App() {
     setSelectedStudentId('all')
     setDetailStudentId(null)
     setActiveTeacherId('teacher-1')
+    lessonMoveHistoryRef.current = []
+    setCanUndoLessonMove(false)
     setNotice('예시 데이터로 초기화했습니다.')
   }
 
@@ -3842,6 +3874,7 @@ export default function App() {
                 </div>
                 <div className="toolbar-actions">
                   {scheduleSettings.transportEnabled && selectedStudent && <RidePills transport={selectedStudent.defaultTransport} />}
+                  {canUndoLessonMove && <button type="button" className="schedule-settings-button undo-move-button" onClick={undoLessonMove} aria-keyshortcuts="Control+Z Meta+Z" title="마지막 드래그 이동 되돌리기 (Ctrl+Z / ⌘Z)"><RotateCcw size={15} /><span>이동 되돌리기</span></button>}
                   {copiedLessonId && <button type="button" className="schedule-settings-button paste-lesson-button" onClick={() => setLessonModal({ open: true, templateLessonId: copiedLessonId })}><Copy size={15} /><span>붙여넣기</span></button>}
                   <button type="button" className="schedule-settings-button" onClick={() => printPageMode('print-schedule')}><Download size={15} /><span>인쇄</span></button>
                   <button

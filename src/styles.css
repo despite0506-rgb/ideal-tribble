@@ -2257,6 +2257,7 @@ body.sidebar-resizing {
 .holiday-column-overlay { position: absolute; z-index: 1; inset: 12px 8px auto; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 1px dashed #d4bd7a; border-radius: 9px; color: #8a641e; background: rgba(255,250,233,.92); font-size: 9px; }
 .holiday-empty-day { display: flex; align-items: center; justify-content: center; gap: 6px; color: #8a641e; background: #fffaf0; }
 .paste-lesson-button { color: #6555a2 !important; border-color: #d4ccef !important; background: #f8f6ff !important; }
+.undo-move-button { color: #8a641e !important; border-color: #e1cf9d !important; background: #fffaf0 !important; }
 .density-setting { min-width: 122px; }
 .schedule-panel.density-compact .lesson-list-card { min-height: 76px; padding-top: 7px; padding-bottom: 7px; }
 .schedule-panel.density-compact .lesson-list-cards { gap: 6px; padding: 7px; }
