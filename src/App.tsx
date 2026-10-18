@@ -3680,6 +3680,13 @@ export default function App() {
           <span className="brand-mark">{scheduleSettings.academyName.trim().slice(0, 1) || '학'}</span>
           <div><strong>{scheduleSettings.academyName}</strong><small>Academy Planner</small></div>
         </div>
+        <section className="sidebar-teacher-switcher" aria-label="선생님 시간표 선택">
+          <header><span>선생님 시간표</span><button type="button" onClick={() => setNameSettingsOpen(true)} aria-label="학원과 선생님 이름 설정"><Settings2 size={13} /></button></header>
+          <div>{TEACHERS.map((teacher) => {
+            const lessonCount = appState.lessons.filter((lesson) => lesson.teacherId === teacher.id).length
+            return <button type="button" key={teacher.id} className={activeTeacherId === teacher.id ? 'active' : ''} onClick={() => { setActiveTeacherId(teacher.id); setView('schedule') }} aria-pressed={activeTeacherId === teacher.id}><span>{scheduleSettings.teacherNames[teacher.index]}</span><small>{lessonCount}개</small></button>
+          })}</div>
+        </section>
         <nav className="main-nav" aria-label="주 메뉴">
           <button type="button" className={view === 'schedule' ? 'active' : ''} onClick={() => setView('schedule')}>
             <LayoutDashboard size={18} /> 시간표
@@ -3697,13 +3704,6 @@ export default function App() {
             <UsersRound size={18} /> 학생 관리 <span>{appState.students.length}</span>
           </button>
         </nav>
-        <section className="sidebar-teacher-switcher" aria-label="선생님 시간표 선택">
-          <header><span>선생님 시간표</span><button type="button" onClick={() => setNameSettingsOpen(true)} aria-label="학원과 선생님 이름 설정"><Settings2 size={13} /></button></header>
-          <div>{TEACHERS.map((teacher) => {
-            const lessonCount = appState.lessons.filter((lesson) => lesson.teacherId === teacher.id).length
-            return <button type="button" key={teacher.id} className={activeTeacherId === teacher.id ? 'active' : ''} onClick={() => { setActiveTeacherId(teacher.id); setView('schedule') }} aria-pressed={activeTeacherId === teacher.id}><span>{scheduleSettings.teacherNames[teacher.index]}</span><small>{lessonCount}개</small></button>
-          })}</div>
-        </section>
         <div className="sidebar-section-head">
           <span>학생별 시간표</span>
           <button type="button" onClick={() => setBulkStudentModalOpen(true)} aria-label="학생 등록"><Plus size={16} /></button>
