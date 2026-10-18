@@ -8,9 +8,12 @@ describe('저장 자료 호환성', () => {
       attendanceRecords: _attendanceRecords,
       attendanceSessions: _attendanceSessions,
       paymentRecords: _paymentRecords,
+      weeklyMemos: _weeklyMemos,
+      holidayClosures: _holidayClosures,
+      makeupRecords: _makeupRecords,
       ...legacyState
     } = structuredClone(DEMO_STATE)
-    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [], paymentRecords: [] })
+    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [], paymentRecords: [], weeklyMemos: [], holidayClosures: [], makeupRecords: [] })
   })
 
   it('기존 수업은 자동 색상으로, 직접 지정한 색은 사용자 색상으로 구분한다', () => {
@@ -85,5 +88,11 @@ describe('시간표 설정', () => {
       showStudentAvatars: false,
       showStudentNames: false,
     })).toMatchObject({ showStudentAvatars: false, showStudentNames: false })
+  })
+
+  it('기존 설정은 편한 밀도로 열고 좁은 밀도 설정을 보존한다', () => {
+    const { density: _density, ...legacySettings } = DEFAULT_SCHEDULE_SETTINGS
+    expect(parseScheduleSettings(legacySettings)?.density).toBe('comfortable')
+    expect(parseScheduleSettings({ ...DEFAULT_SCHEDULE_SETTINGS, density: 'compact' })?.density).toBe('compact')
   })
 })

@@ -15,6 +15,7 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   transportEnabled: true,
   showStudentAvatars: true,
   showStudentNames: true,
+  density: 'comfortable',
 }
 
 const cloneDemo = (): AppState => JSON.parse(JSON.stringify(DEMO_STATE)) as AppState
@@ -24,8 +25,13 @@ export const normalizeState = (state: AppState): AppState => ({
   students: state.students.map((student) => ({
     ...student,
     familyId: typeof student.familyId === 'string' && student.familyId ? student.familyId : undefined,
+    registrationDate: typeof student.registrationDate === 'string' ? student.registrationDate : typeof student.createdAt === 'string' ? student.createdAt.slice(0, 10) : '',
+    enrollmentStatus: ['active', 'paused', 'withdrawn'].includes(student.enrollmentStatus) ? student.enrollmentStatus : 'active',
+    guardianName: typeof student.guardianName === 'string' ? student.guardianName : '',
+    guardianPhone: typeof student.guardianPhone === 'string' ? student.guardianPhone : '',
     notionUrl: typeof student.notionUrl === 'string' ? student.notionUrl : '',
     feedbacks: Array.isArray(student.feedbacks) ? student.feedbacks : [],
+    learningRecords: Array.isArray(student.learningRecords) ? student.learningRecords : [],
   })),
   lessons: state.lessons.map((lesson) => ({
     ...lesson,
@@ -49,6 +55,9 @@ export const normalizeState = (state: AppState): AppState => ({
     familyPaymentId: typeof record.familyPaymentId === 'string' && record.familyPaymentId ? record.familyPaymentId : undefined,
     updatedAt: record.updatedAt,
   })) : [],
+  weeklyMemos: Array.isArray(state.weeklyMemos) ? state.weeklyMemos : [],
+  holidayClosures: Array.isArray(state.holidayClosures) ? state.holidayClosures : [],
+  makeupRecords: Array.isArray(state.makeupRecords) ? state.makeupRecords : [],
 })
 
 export function parseAppState(value: unknown): AppState | null {
@@ -119,6 +128,7 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     transportEnabled: typeof settings.transportEnabled === 'boolean' ? settings.transportEnabled : true,
     showStudentAvatars: typeof settings.showStudentAvatars === 'boolean' ? settings.showStudentAvatars : true,
     showStudentNames: typeof settings.showStudentNames === 'boolean' ? settings.showStudentNames : true,
+    density: settings.density === 'compact' ? 'compact' : 'comfortable',
   }
 }
 

@@ -3,6 +3,9 @@ export type TeacherId = 'teacher-1' | 'teacher-2' | 'teacher-3'
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'excused'
 export type PaymentStatus = 'paid' | 'unpaid'
 export type PaymentMethod = 'card' | 'qr' | 'transfer' | 'cash'
+export type EnrollmentStatus = 'active' | 'paused' | 'withdrawn'
+export type LearningRecordType = 'consultation' | 'score' | 'homework' | 'progress' | 'preparation'
+export type MakeupStatus = 'pending' | 'scheduled' | 'completed'
 
 export type Transport = {
   arrivalRide: boolean
@@ -24,10 +27,27 @@ export type Student = {
   school: string
   grade: string
   familyId?: string
+  registrationDate: string
+  enrollmentStatus: EnrollmentStatus
+  guardianName: string
+  guardianPhone: string
   color: string
   defaultTransport: Transport
   notionUrl: string
   feedbacks: FeedbackEntry[]
+  learningRecords: LearningRecord[]
+  createdAt: string
+}
+
+export type LearningRecord = {
+  id: string
+  type: LearningRecordType
+  date: string
+  title: string
+  content: string
+  score?: number
+  targetScore?: number
+  completed?: boolean
   createdAt: string
 }
 
@@ -91,6 +111,33 @@ export type PaymentPart = {
   amount: number
 }
 
+export type WeeklyMemo = {
+  id: string
+  weekStart: string
+  note: string
+  updatedAt: string
+}
+
+export type HolidayClosure = {
+  id: string
+  date: string
+  name: string
+  createdAt: string
+}
+
+export type MakeupRecord = {
+  id: string
+  studentId: string
+  lessonId: string
+  sourceAttendanceId: string
+  absenceDate: string
+  status: MakeupStatus
+  scheduledDate?: string
+  completedDate?: string
+  note: string
+  updatedAt: string
+}
+
 export type AppState = {
   schemaVersion: 1
   students: Student[]
@@ -98,6 +145,9 @@ export type AppState = {
   attendanceRecords: AttendanceRecord[]
   attendanceSessions: AttendanceSession[]
   paymentRecords: PaymentRecord[]
+  weeklyMemos: WeeklyMemo[]
+  holidayClosures: HolidayClosure[]
+  makeupRecords: MakeupRecord[]
 }
 
 export type WeekendMode = 'hidden' | 'combined' | 'separate'
@@ -112,6 +162,7 @@ export type ScheduleSettings = {
   transportEnabled: boolean
   showStudentAvatars: boolean
   showStudentNames: boolean
+  density: 'compact' | 'comfortable'
 }
 
 export type LessonDraft = Omit<Lesson, 'id' | 'createdAt'>

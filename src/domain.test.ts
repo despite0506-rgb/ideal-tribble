@@ -34,10 +34,15 @@ const student = (id: string, name = id): Student => ({
   name,
   school: '',
   grade: '',
+  registrationDate: '2026-01-01',
+  enrollmentStatus: 'active',
+  guardianName: '',
+  guardianPhone: '',
   color: '#146c63',
   defaultTransport: { arrivalRide: false, departureRide: false },
   notionUrl: '',
   feedbacks: [],
+  learningRecords: [],
   createdAt: '2026-01-01T00:00:00.000Z',
 })
 
@@ -364,6 +369,9 @@ describe('저장 데이터 검증', () => {
     attendanceRecords: [],
     attendanceSessions: [],
     paymentRecords: [],
+    weeklyMemos: [],
+    holidayClosures: [],
+    makeupRecords: [],
   }
 
   it('정상 상태를 허용한다', () => {
@@ -434,5 +442,17 @@ describe('저장 데이터 검증', () => {
       }],
     })).toBe(false)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], familyPaymentId: '' }] })).toBe(false)
+  })
+
+  it('주간 메모, 공휴일 휴강과 보강 연결 기록을 검증한다', () => {
+    const attendanceId = attendanceRecordId('one', '2026-10-19', 'a')
+    const extended = {
+      ...validState,
+      weeklyMemos: [{ id: 'memo-one', weekStart: '2026-10-19', note: '시험 기간', updatedAt: '2026-10-19T01:00:00.000Z' }],
+      holidayClosures: [{ id: 'holiday-one', date: '2026-10-20', name: '휴일', createdAt: '2026-10-19T01:00:00.000Z' }],
+      makeupRecords: [{ id: 'makeup-one', studentId: 'a', lessonId: 'one', sourceAttendanceId: attendanceId, absenceDate: '2026-10-19', status: 'scheduled' as const, scheduledDate: '2026-10-24', note: '감기', updatedAt: '2026-10-19T01:00:00.000Z' }],
+    }
+    expect(validateState(extended)).toBe(true)
+    expect(validateState({ ...extended, makeupRecords: [{ ...extended.makeupRecords[0], studentId: 'missing' }] })).toBe(false)
   })
 })

@@ -9,7 +9,7 @@ const student = (
   grade: string,
   color: string,
   defaultTransport: Transport,
-): Student => ({ id, name, school, grade, color, defaultTransport, notionUrl: '', feedbacks: [], createdAt })
+): Student => ({ id, name, school, grade, registrationDate: '2026-10-13', enrollmentStatus: 'active', guardianName: '', guardianPhone: '', color, defaultTransport, notionUrl: '', feedbacks: [], learningRecords: [], createdAt })
 
 const participant = (
   studentId: string,
@@ -62,4 +62,7 @@ export const DEMO_STATE: AppState = {
   attendanceRecords: [],
   attendanceSessions: [],
   paymentRecords: [],
+  weeklyMemos: [],
+  holidayClosures: [],
+  makeupRecords: [],
 }

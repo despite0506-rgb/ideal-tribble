@@ -447,6 +447,23 @@ export function validateState(value: unknown): value is AppState {
     if (!student || typeof student !== 'object') return false
     if (typeof student.id !== 'string' || typeof student.name !== 'string' || student.name.trim() === '') return false
     if (student.familyId !== undefined && (typeof student.familyId !== 'string' || student.familyId.trim() === '')) return false
+    if (student.registrationDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(student.registrationDate)) return false
+    if (student.enrollmentStatus !== undefined && !['active', 'paused', 'withdrawn'].includes(student.enrollmentStatus)) return false
+    if (student.guardianName !== undefined && typeof student.guardianName !== 'string') return false
+    if (student.guardianPhone !== undefined && typeof student.guardianPhone !== 'string') return false
+    if (student.learningRecords !== undefined) {
+      if (!Array.isArray(student.learningRecords)) return false
+      const learningIds = new Set<string>()
+      for (const record of student.learningRecords) {
+        if (!record || typeof record !== 'object' || typeof record.id !== 'string' || learningIds.has(record.id)) return false
+        learningIds.add(record.id)
+        if (!['consultation', 'score', 'homework', 'progress', 'preparation'].includes(record.type)) return false
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date) || typeof record.title !== 'string' || typeof record.content !== 'string' || typeof record.createdAt !== 'string') return false
+        if (record.score !== undefined && !Number.isFinite(record.score)) return false
+        if (record.targetScore !== undefined && !Number.isFinite(record.targetScore)) return false
+        if (record.completed !== undefined && typeof record.completed !== 'boolean') return false
+      }
+    }
     if (studentIds.has(student.id)) return false
     studentIds.add(student.id)
   }
@@ -529,6 +546,37 @@ export function validateState(value: unknown): value is AppState {
       }
       if (payment.familyPaymentId !== undefined && (typeof payment.familyPaymentId !== 'string' || payment.familyPaymentId.trim() === '')) return false
       if (typeof payment.updatedAt !== 'string') return false
+    }
+  }
+  if (state.weeklyMemos !== undefined) {
+    if (!Array.isArray(state.weeklyMemos)) return false
+    const ids = new Set<string>()
+    for (const memo of state.weeklyMemos) {
+      if (!memo || typeof memo !== 'object' || typeof memo.id !== 'string' || ids.has(memo.id)) return false
+      ids.add(memo.id)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(memo.weekStart) || typeof memo.note !== 'string' || typeof memo.updatedAt !== 'string') return false
+    }
+  }
+  if (state.holidayClosures !== undefined) {
+    if (!Array.isArray(state.holidayClosures)) return false
+    const ids = new Set<string>()
+    for (const closure of state.holidayClosures) {
+      if (!closure || typeof closure !== 'object' || typeof closure.id !== 'string' || ids.has(closure.id)) return false
+      ids.add(closure.id)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(closure.date) || typeof closure.name !== 'string' || typeof closure.createdAt !== 'string') return false
+    }
+  }
+  if (state.makeupRecords !== undefined) {
+    if (!Array.isArray(state.makeupRecords)) return false
+    const ids = new Set<string>()
+    for (const makeup of state.makeupRecords) {
+      if (!makeup || typeof makeup !== 'object' || typeof makeup.id !== 'string' || ids.has(makeup.id)) return false
+      ids.add(makeup.id)
+      if (typeof makeup.studentId !== 'string' || !studentIds.has(makeup.studentId) || typeof makeup.lessonId !== 'string' || typeof makeup.sourceAttendanceId !== 'string') return false
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(makeup.absenceDate) || !['pending', 'scheduled', 'completed'].includes(makeup.status)) return false
+      if (makeup.scheduledDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(makeup.scheduledDate)) return false
+      if (makeup.completedDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(makeup.completedDate)) return false
+      if (typeof makeup.note !== 'string' || typeof makeup.updatedAt !== 'string') return false
     }
   }
   return true
