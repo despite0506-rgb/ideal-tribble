@@ -6,6 +6,7 @@ import type {
   LessonDraft,
   LessonLayout,
   Student,
+  StudentSubject,
   TeacherId,
   WeekendMode,
   Weekday,
@@ -372,14 +373,26 @@ export const DEFAULT_TUITION_AMOUNTS = {
   highKorean: 270000,
 } as const
 
+export function inferStudentSubjects(student: Student, lessons: Lesson[]): StudentSubject[] {
+  const studentLessons = lessonsForStudent(lessons, student.id)
+  const subjects: StudentSubject[] = []
+  if (studentLessons.some((lesson) => lesson.label.toLocaleLowerCase('ko').includes('korean') || lesson.label.includes('국어'))) subjects.push('korean')
+  if (studentLessons.some((lesson) => lesson.label.toLocaleLowerCase('ko').includes('math') || lesson.label.includes('수학'))) subjects.push('math')
+  if (subjects.length === 0 && /^(초|중|고)/.test(getStudentGradeGroup(student))) subjects.push('math')
+  return subjects
+}
+
+export function getStudentSubjects(student: Student, lessons: Lesson[]): StudentSubject[] {
+  return student.subjects.length > 0 ? student.subjects : inferStudentSubjects(student, lessons)
+}
+
 export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
   const gradeGroup = getStudentGradeGroup(student)
-  const studentLessons = lessonsForStudent(lessons, student.id)
-  const hasMath = studentLessons.some((lesson) => lesson.label.includes('수학'))
-  const hasKorean = studentLessons.some((lesson) => lesson.label.includes('국어'))
-  const useGradeFallback = !hasMath && !hasKorean
+  const subjects = getStudentSubjects(student, lessons)
+  const hasMath = subjects.includes('math')
+  const hasKorean = subjects.includes('korean')
   let amount = 0
-  if (hasMath || useGradeFallback) {
+  if (hasMath) {
     if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highMath
     else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleMath
     else if (gradeGroup.startsWith('초')) amount += DEFAULT_TUITION_AMOUNTS.elementaryMath
@@ -468,6 +481,7 @@ export function validateState(value: unknown): value is AppState {
   for (const student of state.students) {
     if (!student || typeof student !== 'object') return false
     if (typeof student.id !== 'string' || typeof student.name !== 'string' || student.name.trim() === '') return false
+    if (student.subjects !== undefined && (!Array.isArray(student.subjects) || student.subjects.some((subject) => subject !== 'math' && subject !== 'korean') || new Set(student.subjects).size !== student.subjects.length)) return false
     if (student.familyId !== undefined && (typeof student.familyId !== 'string' || student.familyId.trim() === '')) return false
     if (student.registrationDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(student.registrationDate)) return false
     if (student.enrollmentStatus !== undefined && !['active', 'paused', 'withdrawn'].includes(student.enrollmentStatus)) return false

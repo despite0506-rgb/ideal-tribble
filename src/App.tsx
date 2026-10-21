@@ -68,11 +68,13 @@ import {
   getDefaultLessonColor,
   getDefaultTuition,
   getLessonColor,
+  getStudentSubjects,
   getStudentGradeGroup,
   gradeGroupSortValue,
   getScheduleColumns,
   getTodayWeekday,
   groupLessonsBySeries,
+  inferStudentSubjects,
   intervalsOverlap,
   layoutLessons,
   lessonsForStudent,
@@ -83,7 +85,7 @@ import {
   validateLesson,
 } from './domain'
 import { loadLocalLabDrafts, loadScheduleSettings, loadState, resetState, saveLocalLabDrafts, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
 type View = 'schedule' | 'lab' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
@@ -138,6 +140,29 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'transfer', label: '계좌이체' },
   { value: 'cash', label: '현금' },
 ]
+type StudentSubjectChoice = 'math' | 'korean' | 'both'
+const STUDENT_SUBJECT_CHOICES: { value: StudentSubjectChoice; label: string }[] = [
+  { value: 'math', label: '수학' },
+  { value: 'korean', label: '국어' },
+  { value: 'both', label: '국어+수학' },
+]
+
+function subjectChoiceFromSubjects(subjects: StudentSubject[]): StudentSubjectChoice {
+  if (subjects.includes('korean') && subjects.includes('math')) return 'both'
+  return subjects.includes('korean') ? 'korean' : 'math'
+}
+
+function subjectsFromChoice(choice: StudentSubjectChoice): StudentSubject[] {
+  return choice === 'both' ? ['korean', 'math'] : [choice]
+}
+
+function studentSubjectLabel(student: Student, lessons: Lesson[]): string {
+  return STUDENT_SUBJECT_CHOICES.find((choice) => choice.value === subjectChoiceFromSubjects(getStudentSubjects(student, lessons)))?.label ?? '수학'
+}
+
+function StudentSubjectTag({ student, lessons }: { student: Student; lessons: Lesson[] }) {
+  return <small className="student-subject-tag">({studentSubjectLabel(student, lessons)})</small>
+}
 
 type BulkStudentRow = {
   id: string
@@ -906,6 +931,7 @@ function NameSettingsModal({
 
 function StudentModal({
   student,
+  studentLessons,
   relatedLessonCount,
   transportEnabled,
   onClose,
@@ -913,6 +939,7 @@ function StudentModal({
   onDelete,
 }: {
   student?: Student
+  studentLessons: Lesson[]
   relatedLessonCount: number
   transportEnabled: boolean
   onClose: () => void
@@ -922,6 +949,7 @@ function StudentModal({
   const [name, setName] = useState(student?.name ?? '')
   const [school, setSchool] = useState(student?.school ?? '')
   const [grade, setGrade] = useState(student?.grade ?? '')
+  const [subjects, setSubjects] = useState<StudentSubject[]>(student ? getStudentSubjects(student, studentLessons) : ['math'])
   const [registrationDate, setRegistrationDate] = useState(student?.registrationDate ?? dateToInputValue(new Date()))
   const [enrollmentStatus, setEnrollmentStatus] = useState<Student['enrollmentStatus']>(student?.enrollmentStatus ?? 'active')
   const [guardianName, setGuardianName] = useState(student?.guardianName ?? '')
@@ -959,6 +987,7 @@ function StudentModal({
       name: name.trim(),
       school: school.trim(),
       grade: grade.trim(),
+      subjects,
       familyId: student?.familyId,
       registrationDate,
       enrollmentStatus,
@@ -992,6 +1021,10 @@ function StudentModal({
               <input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="예: 5학년" />
             </label>
           </div>
+          <fieldset className="segmented-field student-subject-field">
+            <legend>수강과목</legend>
+            <div className="segmented-control student-subject-options">{STUDENT_SUBJECT_CHOICES.map((choice) => <button type="button" key={choice.value} className={subjectChoiceFromSubjects(subjects) === choice.value ? 'active' : ''} onClick={() => setSubjects(subjectsFromChoice(choice.value))}>{choice.label}</button>)}</div>
+          </fieldset>
           <div className="field-row">
             <label className="field">
               <span>등록일</span>
@@ -1100,6 +1133,7 @@ function BulkStudentModal({
       name: row.name.trim(),
       school: row.school,
       grade: row.grade,
+      subjects: ['math'],
       color: schoolColors.get(row.school) ?? (() => {
         const color = STUDENT_COLORS[nextColorIndex % STUDENT_COLORS.length] ?? '#2f6f68'
         nextColorIndex += 1
@@ -1162,6 +1196,40 @@ function BulkStudentModal({
       </form>
     </ModalFrame>
   )
+}
+
+function StudentSubjectsModal({ students, lessons, onClose, onSave }: {
+  students: Student[]
+  lessons: Lesson[]
+  onClose: () => void
+  onSave: (students: Student[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [bulkChoice, setBulkChoice] = useState<StudentSubjectChoice>('math')
+  const [choices, setChoices] = useState<Record<string, StudentSubjectChoice>>(() => Object.fromEntries(
+    students.map((student) => [student.id, subjectChoiceFromSubjects(getStudentSubjects(student, lessons))]),
+  ))
+  const filtered = sortStudents(students.filter((student) => matchesKoreanSearch(student.name, query)
+    || `${student.school} ${student.grade}`.toLocaleLowerCase('ko').includes(query.trim().toLocaleLowerCase('ko'))), 'name')
+  const applyToFiltered = () => setChoices((current) => ({ ...current, ...Object.fromEntries(filtered.map((student) => [student.id, bulkChoice])) }))
+  const inferAll = () => setChoices(Object.fromEntries(students.map((student) => [student.id, subjectChoiceFromSubjects(inferStudentSubjects(student, lessons))])))
+  return <ModalFrame title="수강과목 일괄 설정" eyebrow="학생 이름 옆 과목 표시와 원비 계산에 사용" onClose={onClose} wide>
+    <div className="modal-body subject-bulk-modal">
+      <p className="payment-method-help">수업명으로 먼저 자동 분류한 뒤 필요한 학생만 수정할 수 있습니다. 검색 중에는 검색 결과에만 같은 과목을 일괄 적용합니다.</p>
+      <div className="subject-bulk-tools">
+        <label className="page-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름·학교·학년 검색" aria-label="수강과목 학생 검색" /></label>
+        <select value={bulkChoice} onChange={(event) => setBulkChoice(event.target.value as StudentSubjectChoice)} aria-label="일괄 적용 과목">{STUDENT_SUBJECT_CHOICES.map((choice) => <option value={choice.value} key={choice.value}>{choice.label}</option>)}</select>
+        <button type="button" onClick={applyToFiltered} disabled={filtered.length === 0}>검색 결과 {filtered.length}명 적용</button>
+        <button type="button" className="auto" onClick={inferAll}><BookOpen size={14} /> 수업명으로 자동분류</button>
+      </div>
+      <div className="subject-bulk-list">{filtered.map((student) => <label key={student.id}>
+        <Avatar student={student} size="sm" />
+        <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
+        <select value={choices[student.id] ?? 'math'} onChange={(event) => setChoices((current) => ({ ...current, [student.id]: event.target.value as StudentSubjectChoice }))}>{STUDENT_SUBJECT_CHOICES.map((choice) => <option value={choice.value} key={choice.value}>{choice.label}</option>)}</select>
+      </label>)}{filtered.length === 0 && <div className="detail-empty compact">검색 결과가 없습니다.</div>}</div>
+    </div>
+    <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="button" className="button primary" onClick={() => onSave(students.map((student) => ({ ...student, subjects: subjectsFromChoice(choices[student.id] ?? 'math') })))}>전체 과목 저장</button></footer>
+  </ModalFrame>
 }
 
 function SchoolColorModal({
@@ -2497,7 +2565,7 @@ function FamilyPaymentModal({
             <div><span>학생별 배분</span><strong>{formatWon(allocationTotal)}</strong></div>
             <div className={methodTotal !== allocationTotal ? 'needs-payment' : ''}><span>결제 입력 합계</span><strong>{formatWon(methodTotal)}</strong></div>
           </section>
-          <label className="field family-payment-date"><span>결제일</span><select value={paymentDayValue(dueDate, month)} onChange={(event) => { setDueDate(paymentDateFromDay(month, event.target.value)); setError('') }}><option value="">일 선택</option>{paymentDaysInMonth(month).map((day) => <option value={day} key={day}>{day}일</option>)}</select></label>
+          <label className="field family-payment-date"><span>결제일</span><div className="payment-day-input"><input type="number" min="1" max={paymentDaysInMonth(month).length} inputMode="numeric" value={paymentDayValue(dueDate, month)} onChange={(event) => { setDueDate(paymentDateFromDay(month, event.target.value)); setError('') }} placeholder="일" /><span>일</span></div></label>
           <fieldset className="family-allocation-list">
             <legend>학생별 배분</legend>
             {students.map((student) => {
@@ -2748,7 +2816,7 @@ function PaymentManagementPage({
                     <td>
                       <button type="button" className="payment-student-link" onClick={() => onOpenStudent(student.id)}>
                         <Avatar student={student} size="sm" />
-                        <span><strong>{student.name}</strong><small>{student.school} · {student.grade}</small></span>
+                        <span><span className="student-name-with-subject"><strong>{student.name}</strong><StudentSubjectTag student={student} lessons={lessons} /></span><small>{student.school} · {student.grade}</small></span>
                       </button>
                       {student.familyId && <small className="family-linked-badge">가족 연결</small>}
                     </td>
@@ -2759,7 +2827,7 @@ function PaymentManagementPage({
                       </div>
                     </td>
                     <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
-                    <td><label className="payment-field payment-day-field"><span className="sr-only">{student.name} 결제일</span><select value={paymentDayValue(draft.dueDate, month)} onChange={(event) => updateDraft(student.id, { dueDate: paymentDateFromDay(month, event.target.value) })}><option value="">일 선택</option>{paymentDaysInMonth(month).map((day) => <option value={day} key={day}>{day}일</option>)}</select></label></td>
+                    <td><label className="payment-field payment-day-field"><span className="sr-only">{student.name} 결제일</span><span className="payment-day-input"><input type="number" min="1" max={paymentDaysInMonth(month).length} inputMode="numeric" value={paymentDayValue(draft.dueDate, month)} onChange={(event) => updateDraft(student.id, { dueDate: paymentDateFromDay(month, event.target.value) })} placeholder="일" /><span>일</span></span></label></td>
                     <td>
                       <div className="payment-method-cell">
                         {selectedMethods.length > 0 ? (
@@ -2838,7 +2906,7 @@ type DraftPublishMode = 'all' | 'teacher' | 'selected'
 
 function draftStudentAsStudent(student: DraftStudent): Student {
   return {
-    ...student,
+    ...student, subjects: [],
     registrationDate: '', enrollmentStatus: 'active', guardianName: '', guardianPhone: '',
     defaultTransport: { arrivalRide: false, departureRide: false }, notionUrl: '', feedbacks: [], learningRecords: [], createdAt: '',
   }
@@ -3425,6 +3493,7 @@ export default function App() {
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
   const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
+  const [studentSubjectsModalOpen, setStudentSubjectsModalOpen] = useState(false)
   const [nameSettingsOpen, setNameSettingsOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const cloud = useCloudSync({ appState, setAppState, scheduleSettings, setScheduleSettings })
@@ -3811,6 +3880,13 @@ export default function App() {
     }))
     setSchoolColorModalOpen(false)
     setNotice('학교별 학생 색상을 일괄 적용했습니다.')
+  }
+
+  const saveStudentSubjects = (students: Student[]) => {
+    const subjectsById = new Map(students.map((student) => [student.id, student.subjects]))
+    setAppState((current) => ({ ...current, students: current.students.map((student) => ({ ...student, subjects: subjectsById.get(student.id) ?? student.subjects })) }))
+    setStudentSubjectsModalOpen(false)
+    setNotice(`${students.length}명의 수강과목을 저장했습니다. 결제관리의 자동 원비 계산 기준으로 사용됩니다.`)
   }
 
   const saveGroupMembers = (seriesId: string, studentIds: string[]) => {
@@ -4389,6 +4465,7 @@ export default function App() {
               <div className="students-toolbar-actions">
                 <span>{pageStudents.length}명의 공유 학생</span>
                 <StudentSortControl mode={studentSortMode} onChange={setStudentSortMode} />
+                <button type="button" className="button secondary" onClick={() => setStudentSubjectsModalOpen(true)}><BookOpen size={15} /> 과목 일괄설정</button>
                 <button type="button" className="button secondary" onClick={() => setSchoolColorModalOpen(true)}><Palette size={15} /> 학교별 색상</button>
               </div>
             </div>
@@ -4402,7 +4479,7 @@ export default function App() {
                     <article className="student-card" key={student.id}>
                       <header>
                         <Avatar student={student} size="lg" />
-                        <div><h2>{student.name}</h2><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p></div>
+                        <div><div className="student-card-name"><h2>{student.name}</h2><StudentSubjectTag student={student} lessons={appState.lessons} /></div><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p></div>
                         <button type="button" className="icon-button" onClick={() => setStudentModal({ open: true, studentId: student.id })} aria-label={`${student.name} 정보 수정`}><Pencil size={17} /></button>
                       </header>
                       <div className="student-card-stats">
@@ -4501,6 +4578,7 @@ export default function App() {
         <StudentModal
           key={studentModal.studentId ?? 'new'}
           student={activeEditStudent}
+          studentLessons={activeEditStudent ? lessonsForStudent(appState.lessons, activeEditStudent.id) : []}
           relatedLessonCount={activeEditStudent
             ? appState.lessons.filter((lesson) => lesson.participants.some((participant) => participant.studentId === activeEditStudent.id)).length
             : 0}
@@ -4523,6 +4601,14 @@ export default function App() {
           students={appState.students}
           onClose={() => setSchoolColorModalOpen(false)}
           onSave={saveSchoolColors}
+        />
+      )}
+      {studentSubjectsModalOpen && (
+        <StudentSubjectsModal
+          students={appState.students}
+          lessons={appState.lessons}
+          onClose={() => setStudentSubjectsModalOpen(false)}
+          onSave={saveStudentSubjects}
         />
       )}
       {nameSettingsOpen && (

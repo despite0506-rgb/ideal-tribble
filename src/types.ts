@@ -7,6 +7,7 @@ export type EnrollmentStatus = 'active' | 'paused' | 'withdrawn'
 export type LearningRecordType = 'consultation' | 'score' | 'homework' | 'progress' | 'preparation'
 export type MakeupStatus = 'pending' | 'scheduled' | 'completed'
 export type DraftVisibility = 'local' | 'shared'
+export type StudentSubject = 'math' | 'korean'
 
 export type Transport = {
   arrivalRide: boolean
@@ -27,6 +28,7 @@ export type Student = {
   name: string
   school: string
   grade: string
+  subjects: StudentSubject[]
   familyId?: string
   registrationDate: string
   enrollmentStatus: EnrollmentStatus

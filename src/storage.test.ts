@@ -26,6 +26,12 @@ describe('저장 자료 호환성', () => {
     expect(parseAppState(customState)?.lessons[0]?.colorMode).toBe('custom')
   })
 
+  it('수강과목 기능 추가 전 학생은 빈 과목으로 마이그레이션한다', () => {
+    const state = structuredClone(DEMO_STATE)
+    const students = state.students.map(({ subjects: _subjects, ...student }) => student)
+    expect(parseAppState({ ...state, students })?.students.every((student) => student.subjects.length === 0)).toBe(true)
+  })
+
   it('이전 결제 기록의 실제 결제일은 제거하고 필요한 항목만 유지한다', () => {
     const studentId = DEMO_STATE.students[0]!.id
     const legacyState = {

@@ -34,6 +34,7 @@ const student = (id: string, name = id): Student => ({
   name,
   school: '',
   grade: '',
+  subjects: ['math'],
   registrationDate: '2026-01-01',
   enrollmentStatus: 'active',
   guardianName: '',
@@ -134,9 +135,9 @@ describe('수업 색상', () => {
 })
 
 describe('기본 원비', () => {
-  const elementary = { ...students[0]!, school: '청운초', grade: '5학년' }
-  const middle = { ...students[1]!, school: '광희중', grade: '2학년' }
-  const high = { ...students[2]!, school: '북고', grade: '3학년' }
+  const elementary = { ...students[0]!, school: '청운초', grade: '5학년', subjects: [] }
+  const middle = { ...students[1]!, school: '광희중', grade: '2학년', subjects: [] }
+  const high = { ...students[2]!, school: '북고', grade: '3학년', subjects: [] }
   const tuitionLessons = [
     { ...lesson('elementary-math', ['a'], 600, 660), label: '초등 수학' },
     { ...lesson('middle-math', ['b'], 600, 660), label: '중등 수학' },
@@ -162,6 +163,11 @@ describe('기본 원비', () => {
     expect(getDefaultTuition(elementary, [])).toBe(DEFAULT_TUITION_AMOUNTS.elementaryMath)
     expect(getDefaultTuition(middle, [{ ...lesson('middle-generic', ['b'], 600, 660), label: '중2 정규반' }])).toBe(DEFAULT_TUITION_AMOUNTS.middleMath)
     expect(getDefaultTuition(high, [])).toBe(DEFAULT_TUITION_AMOUNTS.highMath)
+  })
+
+  it('학생에게 저장한 수강과목을 수업명보다 우선 적용한다', () => {
+    expect(getDefaultTuition({ ...middle, subjects: ['korean'] }, tuitionLessons)).toBe(DEFAULT_TUITION_AMOUNTS.middleKorean)
+    expect(getDefaultTuition({ ...high, subjects: ['korean', 'math'] }, [])).toBe(DEFAULT_TUITION_AMOUNTS.highKorean + DEFAULT_TUITION_AMOUNTS.highMath)
   })
 })
 
@@ -409,6 +415,12 @@ describe('저장 데이터 검증', () => {
   it('가족 그룹 연결을 허용하고 빈 가족 id는 거절한다', () => {
     expect(validateState({ ...validState, students: students.map((item, index) => index < 2 ? { ...item, familyId: 'family-one' } : item) })).toBe(true)
     expect(validateState({ ...validState, students: [{ ...students[0]!, familyId: '' }, ...students.slice(1)] })).toBe(false)
+  })
+
+  it('학생 수강과목 조합을 검증한다', () => {
+    expect(validateState({ ...validState, students: [{ ...students[0]!, subjects: ['korean', 'math'] }, ...students.slice(1)] })).toBe(true)
+    expect(validateState({ ...validState, students: [{ ...students[0]!, subjects: ['math', 'math'] }, ...students.slice(1)] })).toBe(false)
+    expect(validateState({ ...validState, students: [{ ...students[0]!, subjects: ['english'] }, ...students.slice(1)] })).toBe(false)
   })
 
   it('연결이 끊긴 학생 참조와 중복 id를 거절한다', () => {

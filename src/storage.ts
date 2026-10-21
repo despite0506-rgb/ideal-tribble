@@ -25,6 +25,7 @@ export const normalizeState = (state: AppState): AppState => ({
   ...state,
   students: state.students.map((student) => ({
     ...student,
+    subjects: Array.isArray(student.subjects) ? student.subjects.filter((subject) => subject === 'math' || subject === 'korean') : [],
     familyId: typeof student.familyId === 'string' && student.familyId ? student.familyId : undefined,
     registrationDate: typeof student.registrationDate === 'string' ? student.registrationDate : typeof student.createdAt === 'string' ? student.createdAt.slice(0, 10) : '',
     enrollmentStatus: ['active', 'paused', 'withdrawn'].includes(student.enrollmentStatus) ? student.enrollmentStatus : 'active',
