@@ -579,6 +579,12 @@ export function validateState(value: unknown): value is AppState {
       paymentKeys.add(paymentKey)
       if (payment.status !== 'paid' && payment.status !== 'unpaid') return false
       if (!Number.isInteger(payment.amount) || payment.amount < 0) return false
+      if (payment.subjectAmounts !== undefined) {
+        if (!payment.subjectAmounts || typeof payment.subjectAmounts !== 'object' || Array.isArray(payment.subjectAmounts)) return false
+        const entries = Object.entries(payment.subjectAmounts)
+        if (entries.some(([subject, amount]) => !['math', 'korean'].includes(subject) || !Number.isInteger(amount) || (amount as number) < 0)) return false
+        if (entries.reduce((total, [, amount]) => total + (amount as number), 0) !== payment.amount) return false
+      }
       if (payment.dueDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
       if (payment.status === 'paid' && payment.dueDate === '') return false
       if (payment.paymentParts !== undefined) {

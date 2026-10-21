@@ -61,6 +61,7 @@ describe('저장 자료 호환성', () => {
       month: '2026-10',
       status: 'paid',
       amount: 200000,
+      subjectAmounts: { math: 200000 },
       dueDate: '2026-10-10',
       paymentParts: [{ id: 'part-one', method: 'transfer', amount: 200000 }],
       familyPaymentId: 'family-payment-one',
@@ -68,6 +69,7 @@ describe('저장 자료 호환성', () => {
     })
     expect(parseAppState(state)?.students.slice(0, 2).every((student) => student.familyId === 'family-one')).toBe(true)
     expect(parseAppState(state)?.paymentRecords[0]?.familyPaymentId).toBe('family-payment-one')
+    expect(parseAppState(state)?.paymentRecords[0]?.subjectAmounts).toEqual({ math: 200000 })
   })
 })
 

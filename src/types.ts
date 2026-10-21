@@ -102,6 +102,7 @@ export type PaymentRecord = {
   month: string
   status: PaymentStatus
   amount: number
+  subjectAmounts?: Partial<Record<StudentSubject, number>>
   dueDate: string
   paymentParts: PaymentPart[]
   familyPaymentId?: string

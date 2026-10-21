@@ -795,13 +795,17 @@ body.sidebar-resizing {
   letter-spacing: -0.025em;
 }
 
-.student-quick-panel > header > span {
+.student-quick-actions > span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--text-light);
   font-size: 9px;
 }
+
+.student-quick-actions { display: flex; align-items: center; gap: 9px; }
+.student-quick-actions > button { display: inline-flex; min-height: 25px; align-items: center; gap: 3px; padding: 0 7px; border: 1px solid var(--border); border-radius: 7px; color: var(--brand); background: #fff; cursor: pointer; font-size: 8px; font-weight: 750; }
+.student-quick-actions > button:hover { border-color: #aacbc4; background: var(--brand-soft); }
 
 .student-class-key {
   width: 8px;
@@ -1338,7 +1342,7 @@ body.sidebar-resizing {
   z-index: 6;
   top: 0;
   display: grid;
-  grid-template-columns: 62px repeat(var(--day-count), minmax(120px, 1fr));
+  grid-template-columns: 66px repeat(var(--day-count), minmax(138px, 1fr));
   border-bottom: 1px solid var(--border);
   background: rgba(248, 250, 249, 0.96);
   backdrop-filter: blur(10px);
@@ -1394,7 +1398,7 @@ body.sidebar-resizing {
 
 .timeline-body {
   display: grid;
-  grid-template-columns: 62px 1fr;
+  grid-template-columns: 66px 1fr;
 }
 
 .time-axis {
@@ -1407,7 +1411,7 @@ body.sidebar-resizing {
   position: absolute;
   right: 8px;
   color: var(--text-light);
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   transform: translateY(-50%);
 }
@@ -1420,7 +1424,7 @@ body.sidebar-resizing {
 .days-grid {
   display: grid;
   height: 100%;
-  grid-template-columns: repeat(var(--day-count), minmax(120px, 1fr));
+  grid-template-columns: repeat(var(--day-count), minmax(138px, 1fr));
 }
 
 .day-column {
@@ -1446,6 +1450,8 @@ body.sidebar-resizing {
   background: #e8eeeb;
   pointer-events: none;
 }
+
+.time-grid-line.is-hour { height: 2px; background: #d8e1de; }
 
 .time-grid-line.is-half-hour {
   background: rgba(232, 238, 235, 0.52);
@@ -2166,10 +2172,9 @@ body.sidebar-resizing {
 .payment-status-switch button { min-height: 29px; padding: 0 10px; border: 0; border-radius: 6px; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 9px; font-weight: 750; }
 .payment-status-switch button.active.unpaid { color: #8a641e; background: #fff2d6; box-shadow: var(--shadow-sm); }
 .payment-status-switch button.active.paid { color: var(--success); background: #eaf7ef; box-shadow: var(--shadow-sm); }
-.payment-tuition-cell { display: grid; min-width: 170px; justify-items: center; gap: 4px; }
+.payment-tuition-cell { display: grid; min-width: 155px; justify-items: center; gap: 4px; }
 .payment-tuition-total { display: flex; align-items: center; gap: 5px; }
-.payment-tuition-total > span { color: var(--text-light); font-size: 8px; }
-.payment-tuition-total > strong { min-width: 42px; color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
+.payment-tuition-total > strong { min-width: 42px; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
 .payment-tuition-total > button { min-height: 25px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--brand); background: #fff; cursor: pointer; font-size: 8px; font-weight: 750; }
 .payment-tuition-total > button:hover { border-color: #aacbc4; background: var(--brand-soft); }
 .payment-tuition-cell > small { color: #6e5a9c; font-size: 7px; font-weight: 700; white-space: nowrap; }
@@ -2223,6 +2228,7 @@ body.sidebar-resizing {
 .tuition-edit-standard span { color: var(--text-muted); font-size: 9px; }
 .tuition-edit-standard strong { color: #6555a2; font-size: 15px; }
 .tuition-edit-standard p { margin: 0; color: #6e5a9c; font-size: 8px; font-weight: 700; }
+.tuition-subject-edit-list { display: grid; gap: 10px; }
 .tuition-edit-field { display: grid; gap: 7px; }
 .tuition-edit-field > span:first-child { color: var(--text); font-size: 10px; font-weight: 800; }
 .tuition-edit-input { position: relative; display: flex; align-items: center; }
@@ -2244,20 +2250,20 @@ body.sidebar-resizing {
 .sidebar-teacher-switcher > div > button.active small { color: rgba(255,255,255,.78); }
 .mobile-teacher-select { display: none; }
 
-.weekly-operations-panel { margin: 14px 0; overflow: hidden; border: 1px solid #e3d9b7; border-radius: 14px; background: #fffdf6; box-shadow: var(--shadow-sm); }
-.weekly-operations-panel > header { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; border-bottom: 1px solid #ede5cc; }
+.weekly-operations-panel { margin: 10px 0; overflow: hidden; border: 1px solid #e3d9b7; border-radius: 12px; background: #fffdf6; box-shadow: var(--shadow-sm); }
+.weekly-operations-panel > header { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 10px; border-bottom: 1px solid #ede5cc; }
 .weekly-operations-panel > header > div { display: flex; align-items: center; gap: 8px; color: #8a641e; }
 .weekly-operations-panel > header span { display: grid; gap: 2px; }
 .weekly-operations-panel > header strong { color: var(--text); font-size: 11px; }
 .weekly-operations-panel > header small { color: var(--text-muted); font-size: 8px; }
-.weekly-operations-panel > header .button { min-height: 30px; font-size: 8px; }
+.weekly-operations-panel > header .button { min-height: 27px; font-size: 8px; }
 .weekly-operations-grid { display: grid; grid-template-columns: 1.15fr 1fr 1.4fr; gap: 0; }
-.weekly-operations-grid > div { min-width: 0; padding: 11px; border-left: 1px solid #ede5cc; }
+.weekly-operations-grid > div { min-width: 0; padding: 7px 9px; border-left: 1px solid #ede5cc; }
 .weekly-operations-grid > div:first-child { border-left: 0; }
-.weekly-note-editor { display: grid; gap: 7px; }
-.weekly-note-editor textarea { width: 100%; min-height: 104px; resize: vertical; padding: 9px; border: 1px solid #dfd5b8; border-radius: 9px; outline: 0; color: var(--text); background: #fff; font: inherit; font-size: 9px; line-height: 1.5; }
+.weekly-note-editor { display: grid; gap: 4px; }
+.weekly-note-editor textarea { width: 100%; min-height: 48px; resize: vertical; padding: 7px; border: 1px solid #dfd5b8; border-radius: 8px; outline: 0; color: var(--text); background: #fff; font: inherit; font-size: 9px; line-height: 1.4; }
 .weekly-note-editor textarea:focus { border-color: #b99b53; box-shadow: 0 0 0 3px rgba(185,155,83,.12); }
-.weekly-note-editor button { justify-self: end; display: flex; min-height: 27px; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 7px; color: #fff; background: #8a6c2e; cursor: pointer; font-size: 8px; font-weight: 750; }
+.weekly-note-editor button { justify-self: end; display: flex; min-height: 24px; align-items: center; gap: 4px; padding: 0 7px; border: 0; border-radius: 6px; color: #fff; background: #8a6c2e; cursor: pointer; font-size: 8px; font-weight: 750; }
 .weekly-note-editor button:disabled { opacity: .4; cursor: default; }
 .weekly-alert-list h3,
 .weekly-makeup-list h3 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 7px; font-size: 9px; }
@@ -2276,6 +2282,8 @@ body.sidebar-resizing {
 .weekly-makeup-list input { min-width: 0; height: 29px; padding: 0 5px; border: 1px solid #ddd3b4; border-radius: 7px; background: #fff; font-size: 8px; }
 .weekly-makeup-list button { min-height: 27px; padding: 0 7px; border: 1px solid #d9c99e; border-radius: 7px; color: #725618; background: #fff; cursor: pointer; font-size: 7px; font-weight: 750; }
 .weekly-makeup-list button.completed { color: var(--success); border-color: #b9dcc4; background: #eef9f1; }
+.weekly-alert-list,
+.weekly-makeup-list { max-height: 86px; overflow-y: auto; }
 .holiday-modal-body { gap: 12px; }
 .holiday-list { display: grid; max-height: 240px; gap: 5px; overflow-y: auto; }
 .holiday-list > div:not(.detail-empty) { display: flex; min-height: 43px; align-items: center; justify-content: space-between; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; }
@@ -4692,7 +4700,7 @@ button.selected-student-chip {
   .stats-grid-bottom { margin-top: 11px; margin-bottom: 0; }
   .student-quick-panel { margin: 14px 0 11px; padding: 8px; border-radius: 10px; }
   .student-quick-panel > header { margin-bottom: 7px; }
-  .student-quick-panel > header > span { display: none; }
+  .student-quick-actions > span { display: none; }
   .grade-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
   .grade-group { padding: 5px; }
   .stat-card { gap: 8px; padding: 11px; border-radius: 11px; }

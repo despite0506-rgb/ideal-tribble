@@ -113,7 +113,7 @@ type LessonTimeValue = {
   end: string
 }
 
-const PIXELS_PER_MINUTE = 1.05
+const PIXELS_PER_MINUTE = 1.6
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
 const SIDEBAR_MIN_WIDTH = 190
@@ -405,7 +405,7 @@ function Timeline({
   const today = getTodayWeekday()
   const gridStyle = {
     '--day-count': columns.length,
-    '--timeline-min-width': `${62 + columns.length * 120}px`,
+    '--timeline-min-width': `${66 + columns.length * 138}px`,
   } as CSSProperties
 
   return (
@@ -616,19 +616,6 @@ function LessonList({
   )
 }
 
-function StatCard({ icon, label, value, hint, tone }: { icon: React.ReactNode; label: string; value: string | number; hint: string; tone: string }) {
-  return (
-    <article className={`stat-card ${tone}`}>
-      <span className="stat-icon">{icon}</span>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{hint}</small>
-      </div>
-    </article>
-  )
-}
-
 function StudentQuickLinks({
   students,
   assignedStudentIds,
@@ -660,12 +647,19 @@ function StudentQuickLinks({
       return next
     })
   }
+  const allCollapsed = groups.length > 0 && groups.every((group) => collapsedGroups.has(group.label))
+  const toggleAllGroups = () => {
+    setCollapsedGroups(allCollapsed ? new Set() : new Set(groups.map((group) => group.label)))
+  }
 
   return (
     <section className="student-quick-panel" aria-labelledby="student-quick-title">
       <header>
         <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">학년별 학생</h2></div>
-        <span><i className="student-class-key" aria-hidden="true" />색상: 현재 선생님 반 · 흑백: 다른 반</span>
+        <div className="student-quick-actions">
+          <span><i className="student-class-key" aria-hidden="true" />색상: 현재 선생님 반 · 흑백: 다른 반</span>
+          <button type="button" onClick={toggleAllGroups} aria-expanded={!allCollapsed}>{allCollapsed ? <ChevronDown size={11} /> : <ChevronRight size={11} />}{allCollapsed ? '전체 펼치기' : '전체 접기'}</button>
+        </div>
       </header>
       <div className="grade-groups">
         {groups.map((group) => (
@@ -737,7 +731,7 @@ function WeeklyOperationsPanel({ weekStart, memo, absences, makeups, closures, s
     <section className="weekly-operations-panel">
       <header><div><TriangleAlert size={18} /><span><strong>이번 주 특이사항</strong><small>{koreanDateLabel(weekStart)}–{koreanDateLabel(shiftDateValue(weekStart, 6))}</small></span></div><button type="button" className="button secondary" onClick={() => setHolidayOpen(true)}><CalendarDays size={14} /> 공휴일 일괄 휴강</button></header>
       <div className="weekly-operations-grid">
-        <div className="weekly-note-editor"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="상담 일정, 시험 기간, 차량 변동 등 이번 주 특이사항을 기록하세요." rows={5} /><button type="button" onClick={() => onSaveMemo(note)} disabled={note === memo}><Check size={14} /> 메모 저장</button></div>
+        <div className="weekly-note-editor"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="상담 일정, 시험 기간, 차량 변동 등 이번 주 특이사항을 기록하세요." rows={2} /><button type="button" onClick={() => onSaveMemo(note)} disabled={note === memo}><Check size={14} /> 메모 저장</button></div>
         <div className="weekly-alert-list"><h3>이번 주 결석 <span>{absences.length}</span></h3>{absences.map((record) => <div key={record.id}><span className={`attendance-count ${record.status}`}>{record.status === 'excused' ? '병' : '결'}</span><span><strong>{studentById(students, record.studentId)?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.date)} · {record.lessonLabel}{record.note ? ` · ${record.note}` : ''}</small></span></div>)}{absences.length === 0 && <p>이번 주 결석 기록이 없습니다.</p>}</div>
         <div className="weekly-makeup-list"><h3>미완료 보강 <span>{visibleMakeups.filter((record) => record.status !== 'completed').length}</span></h3>{visibleMakeups.map((record) => {
           const student = studentById(students, record.studentId)
@@ -2319,9 +2313,15 @@ function AttendanceReportPage({
 type PaymentDraft = {
   status: PaymentStatus
   amount: string
+  subjectAmounts: Partial<Record<StudentSubject, string>>
   dueDate: string
   paymentPartAmounts: Record<PaymentMethod, string>
 }
+
+const TUITION_SUBJECTS: { value: StudentSubject; label: string }[] = [
+  { value: 'korean', label: '국어' },
+  { value: 'math', label: '수학' },
+]
 
 function paymentDaysInMonth(month: string): number[] {
   const [year, monthNumber] = month.split('-').map(Number)
@@ -2351,6 +2351,37 @@ function emptyPaymentPartAmounts(): Record<PaymentMethod, string> {
   return { card: '', qr: '', transfer: '', cash: '' }
 }
 
+function defaultSubjectAmounts(student: Student, lessons: Lesson[]): Partial<Record<StudentSubject, number>> {
+  const registeredSubjects = getStudentSubjects(student, lessons)
+  const breakdown = getTuitionBreakdown(student, lessons)
+  return Object.fromEntries(registeredSubjects.map((subject) => [
+    subject,
+    breakdown.find((item) => item.subject === subject)?.amount ?? 0,
+  ]))
+}
+
+function paymentSubjectAmounts(student: Student, lessons: Lesson[], record?: PaymentRecord): Partial<Record<StudentSubject, string>> {
+  if (record?.subjectAmounts && Object.keys(record.subjectAmounts).length > 0) {
+    return Object.fromEntries(Object.entries(record.subjectAmounts).map(([subject, amount]) => [subject, String(amount)]))
+  }
+  const defaults = defaultSubjectAmounts(student, lessons)
+  const subjects = TUITION_SUBJECTS.map((item) => item.value).filter((subject) => subject in defaults)
+  if (subjects.length === 0) return { math: String(record?.amount ?? 0) }
+  if (!record) return Object.fromEntries(subjects.map((subject) => [subject, String(defaults[subject] ?? 0)]))
+  if (subjects.length === 1) return { [subjects[0]!]: String(record.amount) }
+  const defaultTotal = subjects.reduce((total, subject) => total + (defaults[subject] ?? 0), 0)
+  if (defaultTotal === record.amount) return Object.fromEntries(subjects.map((subject) => [subject, String(defaults[subject] ?? 0)]))
+  const adjusted = Object.fromEntries(subjects.map((subject) => [subject, defaults[subject] ?? 0])) as Partial<Record<StudentSubject, number>>
+  const lastSubject = subjects.at(-1)
+  if (lastSubject && (adjusted[lastSubject] ?? 0) + record.amount - defaultTotal >= 0) {
+    adjusted[lastSubject] = (adjusted[lastSubject] ?? 0) + record.amount - defaultTotal
+  } else if (subjects[0]) {
+    subjects.forEach((subject) => { adjusted[subject] = 0 })
+    adjusted[subjects[0]] = record.amount
+  }
+  return Object.fromEntries(subjects.map((subject) => [subject, String(adjusted[subject] ?? 0)]))
+}
+
 function paymentDraftsForMonth(students: Student[], lessons: Lesson[], records: PaymentRecord[], month: string): Record<string, PaymentDraft> {
   return Object.fromEntries(students.map((student) => {
     const record = records.find((item) => item.studentId === student.id && item.month === month)
@@ -2360,6 +2391,7 @@ function paymentDraftsForMonth(students: Student[], lessons: Lesson[], records: 
     return [student.id, {
       status: record?.status ?? 'unpaid',
       amount: record ? String(record.amount) : defaultAmount > 0 ? String(defaultAmount) : '',
+      subjectAmounts: paymentSubjectAmounts(student, lessons, record),
       dueDate: record?.dueDate ?? '',
       paymentPartAmounts,
     }]
@@ -2376,6 +2408,14 @@ function formatCompactWon(amount: number): string {
     return `${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 }).format(amount / 10000)}만`
   }
   return formatWon(amount)
+}
+
+function numericSubjectAmounts(amounts: Partial<Record<StudentSubject, string>>): Partial<Record<StudentSubject, number>> {
+  return Object.fromEntries(TUITION_SUBJECTS.flatMap((subject) => {
+    if (!(subject.value in amounts)) return []
+    const amount = Number(amounts[subject.value])
+    return Number.isInteger(amount) && amount >= 0 ? [[subject.value, amount]] : []
+  }))
 }
 
 function paymentPartTotal(partAmounts: Record<PaymentMethod, string>): number {
@@ -2476,32 +2516,32 @@ function PaymentMethodModal({
 function TuitionEditModal({
   student,
   lessons,
-  tuitionAmount,
+  subjectAmounts,
   onClose,
   onApply,
 }: {
   student: Student
   lessons: Lesson[]
-  tuitionAmount: string
+  subjectAmounts: Partial<Record<StudentSubject, string>>
   onClose: () => void
-  onApply: (amount: number) => void
+  onApply: (subjectAmounts: Partial<Record<StudentSubject, number>>) => void
 }) {
-  const automaticAmount = getDefaultTuition(student, lessons)
-  const breakdown = getTuitionBreakdown(student, lessons)
-  const currentAmount = Number(tuitionAmount)
-  const [amountInTenThousands, setAmountInTenThousands] = useState(() => (
-    Number.isFinite(currentAmount) ? String(currentAmount / 10000) : ''
+  const defaults = defaultSubjectAmounts(student, lessons)
+  const editableSubjects = TUITION_SUBJECTS.filter((item) => item.value in subjectAmounts || item.value in defaults)
+  const [amountsInTenThousands, setAmountsInTenThousands] = useState<Partial<Record<StudentSubject, string>>>(() => Object.fromEntries(
+    editableSubjects.map((item) => [item.value, String((Number(subjectAmounts[item.value]) || 0) / 10000)]),
   ))
   const [error, setError] = useState('')
+  const currentTotal = editableSubjects.reduce((total, item) => total + (Number(amountsInTenThousands[item.value]) || 0) * 10000, 0)
 
   const apply = (event: FormEvent) => {
     event.preventDefault()
-    const amount = Number(amountInTenThousands) * 10000
-    if (amountInTenThousands.trim() === '' || !Number.isInteger(amount) || amount < 0) {
-      setError('만원 단위 금액을 숫자로 입력해 주세요. (예: 20 또는 20.5)')
+    const entries = editableSubjects.map((item) => [item.value, Number(amountsInTenThousands[item.value]) * 10000] as const)
+    if (entries.some(([subject, amount]) => amountsInTenThousands[subject]?.trim() === '' || !Number.isInteger(amount) || amount < 0)) {
+      setError('과목별 금액을 만원 단위 숫자로 입력해 주세요. (예: 16 또는 16.5)')
       return
     }
-    onApply(amount)
+    onApply(Object.fromEntries(entries))
   }
 
   return (
@@ -2509,14 +2549,17 @@ function TuitionEditModal({
       <form onSubmit={apply}>
         <div className="modal-body tuition-edit-modal-body">
           <section className="tuition-edit-standard">
-            <div><span>학년·과목 기준 원비</span><strong>{formatCompactWon(automaticAmount)}</strong></div>
-            {breakdown.length > 0 && <p>{breakdown.map((item) => `${item.label} ${formatCompactWon(item.amount)}`).join(' + ')}</p>}
+            <div><span>현재 원비 합계</span><strong>{formatCompactWon(currentTotal)}</strong></div>
           </section>
-          <label className="tuition-edit-field">
-            <span>적용할 원비</span>
-            <span className="tuition-edit-input"><input autoFocus type="number" min="0" step="0.1" inputMode="decimal" value={amountInTenThousands} onChange={(event) => { setAmountInTenThousands(event.target.value); setError('') }} aria-label={`${student.name} 원비`} /><em>만원</em></span>
-          </label>
-          <button type="button" className="tuition-reset-button" onClick={() => { setAmountInTenThousands(String(automaticAmount / 10000)); setError('') }}>학년·과목 기준 금액으로 되돌리기</button>
+          <div className="tuition-subject-edit-list">
+            {editableSubjects.map((item, index) => (
+              <label className="tuition-edit-field" key={item.value}>
+                <span>{item.label}</span>
+                <span className="tuition-edit-input"><input autoFocus={index === 0} type="number" min="0" step="0.1" inputMode="decimal" value={amountsInTenThousands[item.value] ?? ''} onChange={(event) => { setAmountsInTenThousands((current) => ({ ...current, [item.value]: event.target.value })); setError('') }} aria-label={`${student.name} ${item.label} 원비`} /><em>만원</em></span>
+              </label>
+            ))}
+          </div>
+          <button type="button" className="tuition-reset-button" onClick={() => { setAmountsInTenThousands(Object.fromEntries(editableSubjects.map((item) => [item.value, String((defaults[item.value] ?? 0) / 10000)]))); setError('') }}>기본 금액으로 되돌리기</button>
           <p className="payment-method-help">여기서 적용한 뒤 결제관리 표의 저장 버튼을 눌러야 최종 저장됩니다.</p>
           {error && <p className="form-error" role="alert">{error}</p>}
         </div>
@@ -2609,6 +2652,7 @@ function FamilyPaymentModal({
         month,
         status: amount > 0 && allocated === amount ? 'paid' : 'unpaid',
         amount,
+        subjectAmounts: numericSubjectAmounts(drafts[student.id]?.subjectAmounts ?? {}),
         dueDate,
         paymentParts: partsByStudent.get(student.id) ?? [],
         familyPaymentId,
@@ -2741,7 +2785,7 @@ function PaymentManagementPage({
   const updateDraft = (studentId: string, patch: Partial<PaymentDraft>) => {
     setDrafts((current) => ({
       ...current,
-      [studentId]: { status: 'unpaid', amount: '', dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts(), ...current[studentId], ...patch },
+      [studentId]: { status: 'unpaid', amount: '', subjectAmounts: {}, dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts(), ...current[studentId], ...patch },
     }))
     setErrors((current) => ({ ...current, [studentId]: '' }))
     setDirtyStudentIds((current) => new Set(current).add(studentId))
@@ -2752,6 +2796,11 @@ function PaymentManagementPage({
     const amount = Number(draft?.amount)
     if (!draft || !draft.amount.trim() || !Number.isInteger(amount) || amount < 0) {
       setErrors((current) => ({ ...current, [student.id]: '결제금액을 원 단위 숫자로 입력해 주세요.' }))
+      return
+    }
+    const subjectAmounts = numericSubjectAmounts(draft.subjectAmounts)
+    if (Object.values(subjectAmounts).reduce((total, subjectAmount) => total + (subjectAmount ?? 0), 0) !== amount) {
+      setErrors((current) => ({ ...current, [student.id]: '과목별 원비 합계와 전체 원비가 일치하지 않습니다.' }))
       return
     }
     if (draft.status === 'paid' && !draft.dueDate) {
@@ -2774,6 +2823,7 @@ function PaymentManagementPage({
       month,
       status: draft.status,
       amount,
+      subjectAmounts,
       dueDate: draft.dueDate,
       paymentParts: PAYMENT_METHODS.flatMap((method) => {
         const partAmount = Number(draft.paymentPartAmounts[method.value])
@@ -2800,6 +2850,7 @@ function PaymentManagementPage({
         month,
         status: 'unpaid' as const,
         amount: getDefaultTuition(student, lessons),
+        subjectAmounts: defaultSubjectAmounts(student, lessons),
         dueDate: current?.dueDate ?? '',
         paymentParts: current?.paymentParts ?? [],
         familyPaymentId: current?.familyPaymentId,
@@ -2870,11 +2921,13 @@ function PaymentManagementPage({
             </thead>
             <tbody>
               {filteredStudents.map((student) => {
-                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts() }
+                const draft = drafts[student.id] ?? { status: 'unpaid', amount: '', subjectAmounts: paymentSubjectAmounts(student, lessons), dueDate: '', paymentPartAmounts: emptyPaymentPartAmounts() }
                 const savedRecord = records.find((record) => record.studentId === student.id && record.month === month)
                 const selectedMethods = PAYMENT_METHODS.filter((method) => Number(draft.paymentPartAmounts[method.value]) > 0)
                 const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
-                const tuitionBreakdown = getTuitionBreakdown(student, lessons)
+                const tuitionBreakdown = TUITION_SUBJECTS.flatMap((subject) => subject.value in draft.subjectAmounts
+                  ? [{ ...subject, amount: Number(draft.subjectAmounts[subject.value]) || 0 }]
+                  : [])
                 const tuitionAmount = Number(draft.amount)
                 return (
                   <tr key={student.id}>
@@ -2893,8 +2946,8 @@ function PaymentManagementPage({
                     </td>
                     <td>
                       <div className="payment-tuition-cell">
-                        <div className="payment-tuition-total"><span>총</span><strong>{draft.amount.trim() && Number.isFinite(tuitionAmount) ? formatCompactWon(tuitionAmount) : '미설정'}</strong><button type="button" onClick={() => setTuitionEditorStudentId(student.id)}>수정</button></div>
-                        {tuitionBreakdown.length > 0 && <small>기준 {tuitionBreakdown.map((item) => `${item.label} ${formatCompactWon(item.amount)}`).join(' + ')}</small>}
+                        <div className="payment-tuition-total"><strong>{draft.amount.trim() && Number.isFinite(tuitionAmount) ? formatCompactWon(tuitionAmount) : '미설정'}</strong><button type="button" onClick={() => setTuitionEditorStudentId(student.id)}>수정</button></div>
+                        {tuitionBreakdown.length > 0 && <small>{tuitionBreakdown.map((item) => `${item.label} ${formatCompactWon(item.amount)}`).join(' + ')}</small>}
                       </div>
                     </td>
                     <td><label className="payment-field payment-day-field"><span className="sr-only">{student.name} 결제일</span><span className="payment-day-input"><input type="number" min="1" max={paymentDaysInMonth(month).length} inputMode="numeric" value={paymentDayValue(draft.dueDate, month)} onChange={(event) => updateDraft(student.id, { dueDate: paymentDateFromDay(month, event.target.value) })} placeholder="일" /><span>일</span></span></label></td>
@@ -2930,12 +2983,14 @@ function PaymentManagementPage({
           <TuitionEditModal
             student={student}
             lessons={lessons}
-            tuitionAmount={draft.amount}
+            subjectAmounts={draft.subjectAmounts}
             onClose={() => setTuitionEditorStudentId(null)}
-            onApply={(amount) => {
+            onApply={(subjectAmounts) => {
+              const amount = Object.values(subjectAmounts).reduce((total, subjectAmount) => total + (subjectAmount ?? 0), 0)
               const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
               updateDraft(student.id, {
                 amount: String(amount),
+                subjectAmounts: Object.fromEntries(Object.entries(subjectAmounts).map(([subject, subjectAmount]) => [subject, String(subjectAmount)])),
                 status: amount > 0 && allocatedAmount === amount ? 'paid' : 'unpaid',
               })
               setTuitionEditorStudentId(null)
@@ -2975,7 +3030,8 @@ function PaymentManagementPage({
             savedRecords.forEach((record) => {
               const paymentPartAmounts = emptyPaymentPartAmounts()
               record.paymentParts.forEach((part) => { paymentPartAmounts[part.method] = String(part.amount) })
-              next[record.studentId] = { status: record.status, amount: String(record.amount), dueDate: record.dueDate, paymentPartAmounts }
+              const student = studentById(students, record.studentId)
+              next[record.studentId] = { status: record.status, amount: String(record.amount), subjectAmounts: student ? paymentSubjectAmounts(student, lessons, record) : {}, dueDate: record.dueDate, paymentPartAmounts }
             })
             return next
           })
@@ -3677,17 +3733,11 @@ export default function App() {
     || lesson.endMinute <= scheduleSettings.startMinute
     || lesson.startMinute >= scheduleSettings.endMinute
   )).length
-  const today = getTodayWeekday()
   const currentMonth = dateToInputValue(new Date()).slice(0, 7)
   const currentWeekStart = weekStartValue()
   const currentWeekMemo = appState.weeklyMemos.find((memo) => memo.weekStart === currentWeekStart)?.note ?? ''
   const currentWeekAbsences = appState.attendanceRecords.filter((record) => dateIsInWeek(record.date, currentWeekStart) && (record.status === 'absent' || record.status === 'excused'))
   const currentMonthPaidCount = appState.paymentRecords.filter((record) => record.month === currentMonth && record.status === 'paid').length
-  const todayLessons = teacherLessons.filter((lesson) => lesson.weekday === today)
-  const todayRideCount = todayLessons.reduce(
-    (count, lesson) => count + lesson.participants.filter((participant) => participant.transport.arrivalRide || participant.transport.departureRide).length,
-    0,
-  )
 
   const openNewLesson = (presetWeekday?: Weekday, presetStudentId?: string, presetKind?: Lesson['kind']) => {
     if (appState.students.length === 0) {
@@ -4498,12 +4548,6 @@ export default function App() {
                   <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
                 </>
               )}
-            </section>
-            <section className={`stats-grid stats-grid-bottom${scheduleSettings.transportEnabled ? '' : ' without-transport'}`} aria-label="오늘의 요약">
-              <StatCard icon={<UsersRound size={20} />} label="등록 학생" value={appState.students.length} hint="현재 관리 중" tone="mint" />
-              <StatCard icon={<BookOpen size={20} />} label="오늘 수업" value={todayLessons.length} hint={`${WEEKDAYS.find((day) => day.value === today)?.long} 일정`} tone="blue" />
-              <StatCard icon={<UsersRound size={20} />} label="그룹 수업" value={teacherLessons.filter((lesson) => lesson.kind === 'group').length} hint="선택 시간표" tone="purple" />
-              {scheduleSettings.transportEnabled && <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />}
             </section>
           </>
         ) : view === 'lab' ? (

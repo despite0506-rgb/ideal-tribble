@@ -52,6 +52,7 @@ export const normalizeState = (state: AppState): AppState => ({
     month: record.month,
     status: record.status,
     amount: record.amount,
+    ...(record.subjectAmounts ? { subjectAmounts: { ...record.subjectAmounts } } : {}),
     dueDate: record.dueDate,
     paymentParts: Array.isArray(record.paymentParts) ? record.paymentParts : [],
     familyPaymentId: typeof record.familyPaymentId === 'string' && record.familyPaymentId ? record.familyPaymentId : undefined,

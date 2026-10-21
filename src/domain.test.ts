@@ -471,6 +471,7 @@ describe('저장 데이터 검증', () => {
       month: '2026-10',
       status: 'paid' as const,
       amount: 320000,
+      subjectAmounts: { math: 160000, korean: 160000 },
       dueDate: '2026-10-10',
       paymentParts: [{ id: 'payment:a:2026-10:card', method: 'card' as const, amount: 320000 }],
       familyPaymentId: 'family-payment-one',
@@ -480,6 +481,7 @@ describe('저장 데이터 검증', () => {
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], status: 'unpaid', dueDate: '', paymentParts: [] }] })).toBe(true)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], dueDate: '' }] })).toBe(false)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], amount: -1 }] })).toBe(false)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], subjectAmounts: { math: 300000 } }] })).toBe(false)
     expect(validateState({
       ...validState,
       paymentRecords: [{
