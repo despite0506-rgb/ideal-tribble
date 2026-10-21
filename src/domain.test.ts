@@ -372,11 +372,32 @@ describe('저장 데이터 검증', () => {
     weeklyMemos: [],
     holidayClosures: [],
     makeupRecords: [],
+    labDrafts: [],
+    scheduleBackups: [],
   }
 
   it('정상 상태를 허용한다', () => {
     expect(validateState(validState)).toBe(true)
     expect(validateState({ ...validState, lessons: [lesson('large-group', ['a', 'b', 'c'], 700, 760)] })).toBe(true)
+  })
+
+  it('시간표 시안과 실제 시간표 백업을 검증한다', () => {
+    const draftLesson = lesson('draft-lesson', ['virtual-a'], 780, 840)
+    const labDrafts = [{
+      id: 'draft-a',
+      name: '겨울방학 A안',
+      visibility: 'shared' as const,
+      lessons: [draftLesson],
+      virtualStudents: [{ id: 'virtual-a', name: '신규 A', school: '광희중', grade: '1학년', color: '#72b9e6' }],
+      virtualMappings: {},
+      createdAt: '2026-10-21T09:00:00.000Z',
+      updatedAt: '2026-10-21T09:00:00.000Z',
+    }]
+    const scheduleBackups = [{ id: 'backup-a', label: '반영 전', lessons: validState.lessons, createdAt: '2026-10-21T09:00:00.000Z' }]
+    expect(validateState({ ...validState, labDrafts, scheduleBackups })).toBe(true)
+    expect(validateState({ ...validState, labDrafts: [{ ...labDrafts[0]!, visibility: 'public' }] })).toBe(false)
+    expect(validateState({ ...validState, labDrafts: [{ ...labDrafts[0]!, lessons: [{ ...draftLesson, endMinute: 1500 }] }] })).toBe(false)
+    expect(validateState({ ...validState, scheduleBackups: [scheduleBackups[0]!, scheduleBackups[0]!] })).toBe(false)
   })
 
   it('가족 그룹 연결을 허용하고 빈 가족 id는 거절한다', () => {

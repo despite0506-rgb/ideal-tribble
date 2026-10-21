@@ -1,9 +1,10 @@
 import { DEMO_STATE } from './demoData'
 import { validateState } from './domain'
-import type { AppState, ScheduleSettings, TeacherId } from './types'
+import type { AppState, ScheduleDraft, ScheduleSettings, TeacherId } from './types'
 
 export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
 export const SETTINGS_STORAGE_KEY = 'ideal-tribble:schedule-settings:v1'
+export const LOCAL_LAB_STORAGE_KEY = 'ideal-tribble:local-schedule-drafts:v1'
 
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   academyName: '우리 학원',
@@ -58,7 +59,30 @@ export const normalizeState = (state: AppState): AppState => ({
   weeklyMemos: Array.isArray(state.weeklyMemos) ? state.weeklyMemos : [],
   holidayClosures: Array.isArray(state.holidayClosures) ? state.holidayClosures : [],
   makeupRecords: Array.isArray(state.makeupRecords) ? state.makeupRecords : [],
+  labDrafts: Array.isArray(state.labDrafts) ? state.labDrafts : [],
+  scheduleBackups: Array.isArray(state.scheduleBackups) ? state.scheduleBackups : [],
 })
+
+export function loadLocalLabDrafts(): ScheduleDraft[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(LOCAL_LAB_STORAGE_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((draft): draft is ScheduleDraft => Boolean(
+      draft && typeof draft === 'object' && typeof draft.id === 'string' && typeof draft.name === 'string'
+      && draft.visibility === 'local' && Array.isArray(draft.lessons) && Array.isArray(draft.virtualStudents),
+    )).map((draft) => ({ ...draft, virtualMappings: draft.virtualMappings && typeof draft.virtualMappings === 'object' ? draft.virtualMappings : {} }))
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalLabDrafts(drafts: ScheduleDraft[]): void {
+  try {
+    localStorage.setItem(LOCAL_LAB_STORAGE_KEY, JSON.stringify(drafts.filter((draft) => draft.visibility === 'local')))
+  } catch {
+    // The shared timetable remains usable if local draft storage is unavailable.
+  }
+}
 
 export function parseAppState(value: unknown): AppState | null {
   return validateState(value) ? normalizeState(value) : null

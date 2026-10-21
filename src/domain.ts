@@ -438,6 +438,27 @@ export function matchesKoreanSearch(value: string, query: string): boolean {
   return /^[ㄱ-ㅎ]+$/.test(normalizedQuery) && getKoreanInitials(normalizedValue).includes(normalizedQuery)
 }
 
+function isScheduleSnapshotLesson(value: unknown): value is Lesson {
+  if (!value || typeof value !== 'object') return false
+  const lesson = value as Partial<Lesson>
+  if (typeof lesson.id !== 'string' || typeof lesson.label !== 'string' || typeof lesson.createdAt !== 'string') return false
+  if (lesson.kind !== 'individual' && lesson.kind !== 'group') return false
+  if (!lesson.teacherId || !['teacher-1', 'teacher-2', 'teacher-3'].includes(lesson.teacherId)) return false
+  if (!Number.isInteger(lesson.weekday) || Number(lesson.weekday) < 1 || Number(lesson.weekday) > 7) return false
+  if (!Number.isInteger(lesson.startMinute) || !Number.isInteger(lesson.endMinute) || Number(lesson.startMinute) < 0 || Number(lesson.startMinute) >= Number(lesson.endMinute) || Number(lesson.endMinute) > 1440) return false
+  if (!Array.isArray(lesson.participants) || (lesson.kind === 'individual' ? lesson.participants.length !== 1 : lesson.participants.length < 2)) return false
+  const participantIds = new Set<string>()
+  for (const participant of lesson.participants) {
+    if (!participant || typeof participant !== 'object' || typeof participant.studentId !== 'string' || participantIds.has(participant.studentId)) return false
+    participantIds.add(participant.studentId)
+    const transport = participant.transport
+    if (!transport || typeof transport !== 'object' || typeof transport.arrivalRide !== 'boolean' || typeof transport.departureRide !== 'boolean') return false
+    if (transport.arrivalMinute !== undefined && (!Number.isInteger(transport.arrivalMinute) || transport.arrivalMinute < 0 || transport.arrivalMinute > 1440)) return false
+    if (transport.departureMinute !== undefined && (!Number.isInteger(transport.departureMinute) || transport.departureMinute < 0 || transport.departureMinute > 1440)) return false
+  }
+  return true
+}
+
 export function validateState(value: unknown): value is AppState {
   if (!value || typeof value !== 'object') return false
   const state = value as Partial<AppState>
@@ -577,6 +598,41 @@ export function validateState(value: unknown): value is AppState {
       if (makeup.scheduledDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(makeup.scheduledDate)) return false
       if (makeup.completedDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(makeup.completedDate)) return false
       if (typeof makeup.note !== 'string' || typeof makeup.updatedAt !== 'string') return false
+    }
+  }
+  if (state.labDrafts !== undefined) {
+    if (!Array.isArray(state.labDrafts)) return false
+    const draftIds = new Set<string>()
+    for (const draft of state.labDrafts) {
+      if (!draft || typeof draft !== 'object' || typeof draft.id !== 'string' || draftIds.has(draft.id) || typeof draft.name !== 'string') return false
+      draftIds.add(draft.id)
+      if (draft.visibility !== 'shared' && draft.visibility !== 'local') return false
+      if (!Array.isArray(draft.lessons) || !Array.isArray(draft.virtualStudents) || !draft.virtualMappings || typeof draft.virtualMappings !== 'object' || Array.isArray(draft.virtualMappings)) return false
+      if (typeof draft.createdAt !== 'string' || typeof draft.updatedAt !== 'string') return false
+      const draftStudentIds = new Set<string>()
+      for (const student of draft.virtualStudents) {
+        if (!student || typeof student !== 'object' || typeof student.id !== 'string' || draftStudentIds.has(student.id) || typeof student.name !== 'string' || typeof student.school !== 'string' || typeof student.grade !== 'string' || typeof student.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(student.color)) return false
+        draftStudentIds.add(student.id)
+      }
+      if (Object.values(draft.virtualMappings).some((studentId) => typeof studentId !== 'string')) return false
+      const draftLessonIds = new Set<string>()
+      for (const lesson of draft.lessons) {
+        if (!isScheduleSnapshotLesson(lesson) || draftLessonIds.has(lesson.id)) return false
+        draftLessonIds.add(lesson.id)
+      }
+    }
+  }
+  if (state.scheduleBackups !== undefined) {
+    if (!Array.isArray(state.scheduleBackups)) return false
+    const backupIds = new Set<string>()
+    for (const backup of state.scheduleBackups) {
+      if (!backup || typeof backup !== 'object' || typeof backup.id !== 'string' || backupIds.has(backup.id) || typeof backup.label !== 'string' || !Array.isArray(backup.lessons) || typeof backup.createdAt !== 'string') return false
+      backupIds.add(backup.id)
+      const lessonIds = new Set<string>()
+      for (const lesson of backup.lessons) {
+        if (!isScheduleSnapshotLesson(lesson) || lessonIds.has(lesson.id)) return false
+        lessonIds.add(lesson.id)
+      }
     }
   }
   return true

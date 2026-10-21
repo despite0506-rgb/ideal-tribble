@@ -35,6 +35,8 @@ const EMPTY_STATE: AppState = {
   weeklyMemos: [],
   holidayClosures: [],
   makeupRecords: [],
+  labDrafts: [],
+  scheduleBackups: [],
 }
 
 function withCloudTimeout<T>(operation: PromiseLike<T>, timeoutMs = 12000): Promise<T> {

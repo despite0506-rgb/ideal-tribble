@@ -65,4 +65,6 @@ export const DEMO_STATE: AppState = {
   weeklyMemos: [],
   holidayClosures: [],
   makeupRecords: [],
+  labDrafts: [],
+  scheduleBackups: [],
 }

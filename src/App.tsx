@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Beaker,
   BookOpen,
   Bus,
   CalendarDays,
@@ -16,6 +17,7 @@ import {
   CreditCard,
   Download,
   ExternalLink,
+  GitCompare,
   LayoutDashboard,
   List,
   Link2,
@@ -71,6 +73,7 @@ import {
   getScheduleColumns,
   getTodayWeekday,
   groupLessonsBySeries,
+  intervalsOverlap,
   layoutLessons,
   lessonsForStudent,
   matchesKoreanSearch,
@@ -79,11 +82,11 @@ import {
   timeToMinutes,
   validateLesson,
 } from './domain'
-import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import { loadLocalLabDrafts, loadScheduleSettings, loadState, resetState, saveLocalLabDrafts, saveScheduleSettings, saveState } from './storage'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, TeacherId, Transport, Weekday, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 
-type View = 'schedule' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
+type View = 'schedule' | 'lab' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
 type Selection = 'all' | string
 type StudentSortMode = 'registered' | 'name'
@@ -2775,6 +2778,155 @@ function PaymentManagementPage({
   )
 }
 
+type LabConflict = { firstId: string; secondId: string; message: string }
+type DraftPublishMode = 'all' | 'teacher' | 'selected'
+
+function draftStudentAsStudent(student: DraftStudent): Student {
+  return {
+    ...student,
+    registrationDate: '', enrollmentStatus: 'active', guardianName: '', guardianPhone: '',
+    defaultTransport: { arrivalRide: false, departureRide: false }, notionUrl: '', feedbacks: [], learningRecords: [], createdAt: '',
+  }
+}
+
+function findLabConflicts(lessons: Lesson[], students: Student[]): LabConflict[] {
+  const conflicts: LabConflict[] = []
+  for (let firstIndex = 0; firstIndex < lessons.length; firstIndex += 1) {
+    const first = lessons[firstIndex]!
+    for (let secondIndex = firstIndex + 1; secondIndex < lessons.length; secondIndex += 1) {
+      const second = lessons[secondIndex]!
+      if (first.weekday !== second.weekday || !intervalsOverlap(first.startMinute, first.endMinute, second.startMinute, second.endMinute)) continue
+      const sharedIds = first.participants.map((participant) => participant.studentId).filter((id) => second.participants.some((participant) => participant.studentId === id))
+      if (sharedIds.length > 0) {
+        const names = sharedIds.map((id) => studentById(students, id)?.name ?? '가상 학생').join(' · ')
+        conflicts.push({ firstId: first.id, secondId: second.id, message: `${names} 학생의 ${minutesToTime(first.startMinute)} 수업이 겹칩니다.` })
+      } else if (first.teacherId === second.teacherId) {
+        conflicts.push({ firstId: first.id, secondId: second.id, message: `${TEACHERS.find((teacher) => teacher.id === first.teacherId)?.index !== undefined ? '같은 선생님' : '선생님'}의 ${minutesToTime(first.startMinute)} 수업이 겹칩니다.` })
+      }
+    }
+  }
+  return conflicts
+}
+
+function CreateDraftModal({ teacherNames, onClose, onCreate }: { teacherNames: ScheduleSettings['teacherNames']; onClose: () => void; onCreate: (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId) => void }) {
+  const [name, setName] = useState('새 시간표 시안')
+  const [visibility, setVisibility] = useState<DraftVisibility>('local')
+  const [source, setSource] = useState<'all' | 'empty' | TeacherId>('all')
+  return <ModalFrame title="새 시간표 시안" eyebrow="실제 시간표와 분리된 연습 공간" onClose={onClose}>
+    <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onCreate(name.trim(), visibility, source) }}>
+      <div className="modal-body lab-create-modal">
+        <label className="field"><span>시안 이름</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 2027 겨울방학 A안" required /></label>
+        <fieldset className="segmented-field"><legend>시작 방식</legend><div className="lab-source-options">
+          <button type="button" className={source === 'all' ? 'active' : ''} onClick={() => setSource('all')}>현재 전체 복제</button>
+          <button type="button" className={source === 'empty' ? 'active' : ''} onClick={() => setSource('empty')}>빈 시간표</button>
+          {TEACHERS.map((teacher) => <button type="button" className={source === teacher.id ? 'active' : ''} key={teacher.id} onClick={() => setSource(teacher.id)}>{teacherNames[teacher.index]}만 복제</button>)}
+        </div></fieldset>
+        <fieldset className="segmented-field"><legend>저장 위치</legend><div className="segmented-control"><button type="button" className={visibility === 'local' ? 'active' : ''} onClick={() => setVisibility('local')}>내 기기에만</button><button type="button" className={visibility === 'shared' ? 'active' : ''} onClick={() => setVisibility('shared')}>선생님들과 공유</button></div><small className="lab-field-help">공유 시안만 클라우드를 통해 다른 컴퓨터에 표시됩니다.</small></fieldset>
+      </div>
+      <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary"><Beaker size={15} /> 시안 만들기</button></footer>
+    </form>
+  </ModalFrame>
+}
+
+function VirtualStudentModal({ onClose, onSave }: { onClose: () => void; onSave: (student: DraftStudent) => void }) {
+  const [name, setName] = useState('')
+  const [school, setSchool] = useState('')
+  const [grade, setGrade] = useState('')
+  const [color, setColor] = useState(STUDENT_COLORS[0] ?? '#2f6f68')
+  return <ModalFrame title="가상 학생 추가" eyebrow="실험실에서만 사용하는 임시 학생" onClose={onClose}>
+    <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSave({ id: createId('virtual-student'), name: name.trim(), school: school.trim(), grade: grade.trim(), color }) }}>
+      <div className="modal-body"><label className="field"><span>가상 학생 이름</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 중1 신규 A" required /></label><div className="field-row"><label className="field"><span>학교</span><input value={school} onChange={(event) => setSchool(event.target.value)} /></label><label className="field"><span>학년</span><input value={grade} onChange={(event) => setGrade(event.target.value)} /></label></div><fieldset className="color-field"><legend>구분 색상</legend><div className="color-options">{STUDENT_COLORS.map((option) => <button type="button" key={option} className={color === option ? 'selected' : ''} style={{ '--swatch': option } as CSSProperties} onClick={() => setColor(option)} aria-label={`색상 ${option}`}>{color === option && <Check size={15} />}</button>)}</div></fieldset></div>
+      <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary">가상 학생 추가</button></footer>
+    </form>
+  </ModalFrame>
+}
+
+function PublishDraftModal({ draft, students, conflicts, activeTeacherId, teacherNames, onClose, onPublish }: { draft: ScheduleDraft; students: Student[]; conflicts: LabConflict[]; activeTeacherId: TeacherId; teacherNames: ScheduleSettings['teacherNames']; onClose: () => void; onPublish: (mode: DraftPublishMode, teacherId: TeacherId, lessonIds: string[]) => void }) {
+  const [mode, setMode] = useState<DraftPublishMode>('selected')
+  const [teacherId, setTeacherId] = useState<TeacherId>(activeTeacherId)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(draft.lessons.map((lesson) => lesson.id)))
+  const [confirmation, setConfirmation] = useState('')
+  const targetLessons = mode === 'all' ? draft.lessons : mode === 'teacher' ? draft.lessons.filter((lesson) => lesson.teacherId === teacherId) : draft.lessons.filter((lesson) => selectedIds.has(lesson.id))
+  const targetIds = new Set(targetLessons.map((lesson) => lesson.id))
+  const relevantConflicts = conflicts.filter((conflict) => targetIds.has(conflict.firstId) && targetIds.has(conflict.secondId))
+  const usedVirtualIds = new Set(targetLessons.flatMap((lesson) => lesson.participants.map((participant) => participant.studentId)).filter((id) => draft.virtualStudents.some((student) => student.id === id)))
+  const unresolved = [...usedVirtualIds].filter((id) => !draft.virtualMappings[id] || !students.some((student) => student.id === draft.virtualMappings[id]))
+  const selectedCount = targetLessons.length
+  const blocked = confirmation.trim() !== '반영' || unresolved.length > 0 || relevantConflicts.length > 0 || (mode === 'selected' && selectedCount === 0)
+  return <ModalFrame title="실제 시간표로 반영" eyebrow={`${draft.name} · 마지막 안전 확인`} onClose={onClose} wide>
+    <div className="modal-body lab-publish-modal">
+      <div className="lab-danger-banner"><TriangleAlert size={19} /><span><strong>실제 운영 시간표가 변경됩니다.</strong><small>반영 직전 시간표는 자동 백업되어 실험실에서 다시 복구할 수 있습니다.</small></span></div>
+      <fieldset className="segmented-field"><legend>반영 범위</legend><div className="lab-publish-modes"><button type="button" className={mode === 'selected' ? 'active' : ''} onClick={() => setMode('selected')}>선택 수업만</button><button type="button" className={mode === 'teacher' ? 'active' : ''} onClick={() => setMode('teacher')}>선생님 한 명 교체</button><button type="button" className={mode === 'all' ? 'active' : ''} onClick={() => setMode('all')}>전체 시간표 교체</button></div></fieldset>
+      {mode === 'teacher' && <label className="field"><span>교체할 선생님</span><select value={teacherId} onChange={(event) => setTeacherId(event.target.value as TeacherId)}>{TEACHERS.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacherNames[teacher.index]}</option>)}</select></label>}
+      {mode === 'selected' && <div className="lab-publish-lessons">{draft.lessons.map((lesson) => <label key={lesson.id}><input type="checkbox" checked={selectedIds.has(lesson.id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(lesson.id)) next.delete(lesson.id); else next.add(lesson.id); return next })} /><span><strong>{lesson.label}</strong><small>{WEEKDAYS.find((day) => day.value === lesson.weekday)?.long} {minutesToTime(lesson.startMinute)} · {teacherNames[TEACHERS.find((teacher) => teacher.id === lesson.teacherId)?.index ?? 0]}</small></span></label>)}</div>}
+      <div className="lab-publish-summary"><span>반영 수업 <strong>{selectedCount}</strong>개</span><span>미연결 가상 학생 <strong>{unresolved.length}</strong>명</span><span>충돌 <strong>{relevantConflicts.length}</strong>건</span></div>
+      {unresolved.length > 0 && <p className="form-error">사용 중인 가상 학생을 실제 학생과 모두 연결해 주세요.</p>}
+      {relevantConflicts.length > 0 && <p className="form-error">반영할 수업의 시간 충돌을 모두 해결해 주세요.</p>}
+      <label className="field"><span>확인을 위해 <strong>반영</strong>을 입력하세요.</span><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="반영" /></label>
+    </div>
+    <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="button" className="button primary" disabled={blocked} onClick={() => onPublish(mode, teacherId, [...selectedIds])}>실제 시간표에 반영</button></footer>
+  </ModalFrame>
+}
+
+function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames, activeTeacherId, backupLabel, onCreate, onSaveDraft, onDeleteDraft, onPublish, onRestore }: {
+  drafts: ScheduleDraft[]; liveLessons: Lesson[]; students: Student[]; settings: ScheduleSettings; teacherNames: ScheduleSettings['teacherNames']; activeTeacherId: TeacherId; backupLabel?: string
+  onCreate: (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId) => ScheduleDraft
+  onSaveDraft: (draft: ScheduleDraft) => void; onDeleteDraft: (draft: ScheduleDraft) => void
+  onPublish: (draft: ScheduleDraft, mode: DraftPublishMode, teacherId: TeacherId, lessonIds: string[]) => boolean; onRestore: () => void
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(() => drafts[0]?.id ?? null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [virtualOpen, setVirtualOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
+  const [compareId, setCompareId] = useState<string>('live')
+  const [teacherFilter, setTeacherFilter] = useState<TeacherId | 'all'>('all')
+  const [lessonEditor, setLessonEditor] = useState<{ lessonId?: string; weekday?: Weekday } | null>(null)
+  const undoRef = useRef<Lesson[][]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  const draft = drafts.find((item) => item.id === selectedId) ?? drafts[0]
+  useEffect(() => { if (!drafts.some((item) => item.id === selectedId)) setSelectedId(drafts[0]?.id ?? null) }, [drafts, selectedId])
+  const virtualStudents = draft?.virtualStudents.map(draftStudentAsStudent) ?? []
+  const allStudents = [...students, ...virtualStudents]
+  const conflicts = draft ? findLabConflicts(draft.lessons, allStudents) : []
+  const conflictIds = new Set(conflicts.flatMap((conflict) => [conflict.firstId, conflict.secondId]))
+  const shownLessons = draft?.lessons.filter((lesson) => teacherFilter === 'all' || lesson.teacherId === teacherFilter) ?? []
+  const comparedLessons = compareId === 'live' ? liveLessons : drafts.find((item) => item.id === compareId)?.lessons ?? []
+  const compareMap = new Map(comparedLessons.map((lesson) => [lesson.id, lesson]))
+  const draftMap = new Map((draft?.lessons ?? []).map((lesson) => [lesson.id, lesson]))
+  const added = [...draftMap.keys()].filter((id) => !compareMap.has(id))
+  const removed = [...compareMap.keys()].filter((id) => !draftMap.has(id))
+  const changed = [...draftMap.keys()].filter((id) => compareMap.has(id) && JSON.stringify(draftMap.get(id)) !== JSON.stringify(compareMap.get(id)))
+  const updateDraft = (patch: Partial<ScheduleDraft>) => { if (draft) onSaveDraft({ ...draft, ...patch, updatedAt: new Date().toISOString() }) }
+  const pushUndo = () => { if (!draft) return; undoRef.current = [...undoRef.current.slice(-19), structuredClone(draft.lessons)]; setCanUndo(true) }
+  const undo = () => { const lessons = undoRef.current.pop(); if (!draft || !lessons) return; updateDraft({ lessons }); setCanUndo(undoRef.current.length > 0) }
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => { if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return; const target = event.target; if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return; if (!undoRef.current.length) return; event.preventDefault(); undo() }
+    document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key)
+  })
+  if (!draft) return <section className="lab-empty-page"><span><Beaker size={38} /></span><h2>시간표 실험실</h2><p>실제 시간표에 영향을 주지 않고 여러 조합을 만들어 비교할 수 있습니다.</p><button type="button" className="button primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> 첫 시안 만들기</button>{createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}</section>
+  const editLesson = draft.lessons.find((lesson) => lesson.id === lessonEditor?.lessonId)
+  return <section className="schedule-lab-page">
+    <header className="lab-page-header"><div><span className="lab-watermark"><Beaker size={17} /> 연습용 시간표</span><h2>시간표 실험실</h2><p>여기서 변경해도 실제 수업·출석·결제에는 영향을 주지 않습니다.</p></div><div>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}<button type="button" className="button secondary" onClick={() => setCreateOpen(true)}><Plus size={15} /> 새 시안</button><button type="button" className="button primary" onClick={() => setPublishOpen(true)}>실제 시간표로 반영</button></div></header>
+    <div className="lab-layout">
+      <aside className="lab-draft-sidebar"><header><strong>저장된 시안</strong><span>{drafts.length}</span></header>{drafts.map((item) => <button type="button" key={item.id} className={item.id === draft.id ? 'active' : ''} onClick={() => { setSelectedId(item.id); undoRef.current = []; setCanUndo(false) }}><span><strong>{item.name}</strong><small>{item.visibility === 'shared' ? '공유 시안' : '이 기기에만'} · {item.lessons.length}개</small></span>{item.id === draft.id && <Check size={14} />}</button>)}</aside>
+      <div className="lab-workspace">
+        <div className="lab-workspace-toolbar"><div><input value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} aria-label="시안 이름" /><button type="button" className={draft.visibility === 'shared' ? 'shared' : ''} onClick={() => updateDraft({ visibility: draft.visibility === 'shared' ? 'local' : 'shared' })}>{draft.visibility === 'shared' ? <Cloud size={13} /> : <CloudOff size={13} />}{draft.visibility === 'shared' ? '선생님 공유' : '내 기기 전용'}</button></div><div>{canUndo && <button type="button" onClick={undo} title="Ctrl/⌘+Z"><RotateCcw size={14} /> 되돌리기</button>}<button type="button" onClick={() => setVirtualOpen(true)}><UserPlus size={14} /> 가상 학생</button><button type="button" onClick={() => setLessonEditor({ weekday: getTodayWeekday() })}><Plus size={14} /> 수업 추가</button><button type="button" className="danger" onClick={() => { if (window.confirm(`${draft.name} 시안을 삭제할까요?`)) onDeleteDraft(draft) }}><Trash2 size={14} /></button></div></div>
+        <div className="lab-teacher-tabs"><button type="button" className={teacherFilter === 'all' ? 'active' : ''} onClick={() => setTeacherFilter('all')}>전체</button>{TEACHERS.map((teacher) => <button type="button" className={teacherFilter === teacher.id ? 'active' : ''} key={teacher.id} onClick={() => setTeacherFilter(teacher.id)}>{teacherNames[teacher.index]}</button>)}</div>
+        {conflicts.length > 0 && <div className="lab-conflict-banner"><TriangleAlert size={17} /><span><strong>{conflicts.length}건의 시간 충돌</strong><small>{conflicts[0]?.message}</small></span></div>}
+        <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={settings} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
+        <div className="lab-bottom-grid">
+          <section className="lab-virtual-panel"><header><strong>가상 학생 연결</strong><span>{draft.virtualStudents.length}명</span></header>{draft.virtualStudents.map((student) => <div key={student.id}><Avatar student={draftStudentAsStudent(student)} size="sm" /><span><strong>{student.name}</strong><small>{student.school} {student.grade}</small></span><select value={draft.virtualMappings[student.id] ?? ''} onChange={(event) => updateDraft({ virtualMappings: { ...draft.virtualMappings, [student.id]: event.target.value } })}><option value="">실제 학생 미연결</option>{sortStudents(students, 'name').map((real) => <option value={real.id} key={real.id}>{real.name} · {real.grade}</option>)}</select><button type="button" onClick={() => { const used = draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id)); if (used) return; updateDraft({ virtualStudents: draft.virtualStudents.filter((item) => item.id !== student.id), virtualMappings: Object.fromEntries(Object.entries(draft.virtualMappings).filter(([id]) => id !== student.id)) }) }} disabled={draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id))}><Trash2 size={13} /></button></div>)}{draft.virtualStudents.length === 0 && <p>가상 학생이 없습니다. 등록 전 학생을 임시로 배치할 때 사용하세요.</p>}</section>
+          <section className="lab-compare-panel"><header><div><GitCompare size={16} /><strong>시안 비교</strong></div><select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="live">현재 실제 시간표</option>{drafts.filter((item) => item.id !== draft.id).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></header><div><article><strong>{added.length}</strong><span>추가</span></article><article><strong>{changed.length}</strong><span>변경</span></article><article><strong>{removed.length}</strong><span>제외</span></article><article><strong>{conflicts.length}</strong><span>충돌</span></article></div><ul>{added.slice(0, 3).map((id) => <li key={`a-${id}`}><span className="added">추가</span>{draftMap.get(id)?.label}</li>)}{changed.slice(0, 3).map((id) => <li key={`c-${id}`}><span className="changed">변경</span>{draftMap.get(id)?.label}</li>)}{removed.slice(0, 3).map((id) => <li key={`r-${id}`}><span className="removed">제외</span>{compareMap.get(id)?.label}</li>)}</ul></section>
+        </div>
+      </div>
+    </div>
+    {createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}
+    {virtualOpen && <VirtualStudentModal onClose={() => setVirtualOpen(false)} onSave={(student) => { updateDraft({ virtualStudents: [...draft.virtualStudents, student] }); setVirtualOpen(false) }} />}
+    {publishOpen && <PublishDraftModal draft={draft} students={students} conflicts={conflicts} activeTeacherId={activeTeacherId} teacherNames={teacherNames} onClose={() => setPublishOpen(false)} onPublish={(mode, teacherId, ids) => { if (onPublish(draft, mode, teacherId, ids)) setPublishOpen(false) }} />}
+    {lessonEditor && <LessonModal key={lessonEditor.lessonId ?? `lab-new-${lessonEditor.weekday}`} lesson={editLesson} students={allStudents} lessons={draft.lessons} presetWeekday={lessonEditor.weekday} teacherId={teacherFilter === 'all' ? activeTeacherId : teacherFilter} transportEnabled={settings.transportEnabled} onClose={() => setLessonEditor(null)} onSave={(saved) => { pushUndo(); const savedMap = new Map(saved.map((lesson) => [lesson.id, lesson])); updateDraft({ lessons: [...draft.lessons.map((lesson) => savedMap.get(lesson.id) ?? lesson), ...saved.filter((lesson) => !draft.lessons.some((item) => item.id === lesson.id))] }); setLessonEditor(null) }} onDelete={(lessonId) => { pushUndo(); updateDraft({ lessons: draft.lessons.filter((lesson) => lesson.id !== lessonId) }); setLessonEditor(null) }} />}
+  </section>
+}
+
 function FamilyLinkModal({
   student,
   students,
@@ -3206,6 +3358,7 @@ export default function App() {
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
   const [selectedDay, setSelectedDay] = useState<Weekday>(getTodayWeekday())
   const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(() => loadScheduleSettings())
+  const [localLabDrafts, setLocalLabDrafts] = useState<ScheduleDraft[]>(() => loadLocalLabDrafts())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scheduleFullscreen, setScheduleFullscreen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
@@ -3226,6 +3379,8 @@ export default function App() {
     const error = saveState(appState)
     if (error) setStorageWarning(error)
   }, [appState, storageEnabled])
+
+  useEffect(() => saveLocalLabDrafts(localLabDrafts), [localLabDrafts])
 
   useEffect(() => {
     if (!notice) return
@@ -3258,7 +3413,7 @@ export default function App() {
 
   useEffect(() => {
     const handleUndoShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return
+      if (view !== 'schedule' || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return
       const target = event.target
       if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return
       if (!lessonMoveHistoryRef.current.length) return
@@ -3267,9 +3422,21 @@ export default function App() {
     }
     document.addEventListener('keydown', handleUndoShortcut)
     return () => document.removeEventListener('keydown', handleUndoShortcut)
+  }, [view])
+
+  useEffect(() => {
+    const openLab = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        setView('lab')
+      }
+    }
+    document.addEventListener('keydown', openLab)
+    return () => document.removeEventListener('keydown', openLab)
   }, [])
 
   const sortedStudents = useMemo(() => sortStudents(appState.students, studentSortMode), [appState.students, studentSortMode])
+  const labDrafts = useMemo(() => [...appState.labDrafts, ...localLabDrafts], [appState.labDrafts, localLabDrafts])
   const filteredStudents = sortedStudents.filter((student) => {
     const normalized = studentQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade} ${student.guardianName} ${student.guardianPhone}`.toLocaleLowerCase('ko').includes(normalized)
@@ -3385,6 +3552,81 @@ export default function App() {
     setCopiedLessonId(lessonId)
     setAttendanceModalLessonId(null)
     setNotice('수업을 복사했습니다. 시간표의 붙여넣기 버튼을 눌러 주세요.')
+  }
+
+  const createLabDraft = (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId): ScheduleDraft => {
+    const now = new Date().toISOString()
+    const sourceLessons = source === 'empty' ? [] : source === 'all' ? appState.lessons : appState.lessons.filter((lesson) => lesson.teacherId === source)
+    const draft: ScheduleDraft = { id: createId('schedule-draft'), name, visibility, lessons: structuredClone(sourceLessons), virtualStudents: [], virtualMappings: {}, createdAt: now, updatedAt: now }
+    if (visibility === 'local') setLocalLabDrafts((current) => [...current, draft])
+    else setAppState((current) => ({ ...current, labDrafts: [...current.labDrafts, draft] }))
+    setNotice(`${name} 시안을 만들었습니다.`)
+    return draft
+  }
+
+  const saveLabDraft = (draft: ScheduleDraft) => {
+    if (draft.visibility === 'local') {
+      setLocalLabDrafts((current) => current.some((item) => item.id === draft.id) ? current.map((item) => item.id === draft.id ? draft : item) : [...current, draft])
+      setAppState((current) => ({ ...current, labDrafts: current.labDrafts.filter((item) => item.id !== draft.id) }))
+    } else {
+      setAppState((current) => ({ ...current, labDrafts: current.labDrafts.some((item) => item.id === draft.id) ? current.labDrafts.map((item) => item.id === draft.id ? draft : item) : [...current.labDrafts, draft] }))
+      setLocalLabDrafts((current) => current.filter((item) => item.id !== draft.id))
+    }
+  }
+
+  const deleteLabDraft = (draft: ScheduleDraft) => {
+    if (draft.visibility === 'local') setLocalLabDrafts((current) => current.filter((item) => item.id !== draft.id))
+    else setAppState((current) => ({ ...current, labDrafts: current.labDrafts.filter((item) => item.id !== draft.id) }))
+    setNotice(`${draft.name} 시안을 삭제했습니다.`)
+  }
+
+  const publishLabDraft = (draft: ScheduleDraft, mode: DraftPublishMode, teacherId: TeacherId, lessonIds: string[]): boolean => {
+    const selectedIds = new Set(lessonIds)
+    const sourceLessons = mode === 'all' ? draft.lessons : mode === 'teacher' ? draft.lessons.filter((lesson) => lesson.teacherId === teacherId) : draft.lessons.filter((lesson) => selectedIds.has(lesson.id))
+    const virtualIds = new Set(draft.virtualStudents.map((student) => student.id))
+    const unresolved = sourceLessons.some((lesson) => lesson.participants.some((participant) => virtualIds.has(participant.studentId) && !draft.virtualMappings[participant.studentId]))
+    if (unresolved) { setNotice('실제 학생과 연결되지 않은 가상 학생이 있습니다.'); return false }
+    const existingIds = new Set(appState.lessons.map((lesson) => lesson.id))
+    const resolved = sourceLessons.map((lesson) => ({
+      ...lesson,
+      id: existingIds.has(lesson.id) ? lesson.id : createId('lesson'),
+      participants: lesson.participants.map((participant) => ({ ...participant, studentId: virtualIds.has(participant.studentId) ? draft.virtualMappings[participant.studentId]! : participant.studentId })),
+    }))
+    if (resolved.some((lesson) => new Set(lesson.participants.map((participant) => participant.studentId)).size !== lesson.participants.length)) {
+      setNotice('한 수업의 가상 학생들이 같은 실제 학생으로 연결되어 있습니다.')
+      return false
+    }
+    if (resolved.some((lesson) => lesson.participants.some((participant) => !appState.students.some((student) => student.id === participant.studentId)))) {
+      setNotice('삭제되었거나 연결할 수 없는 학생이 포함되어 있습니다.')
+      return false
+    }
+    let prospectiveLessons: Lesson[]
+    if (mode === 'all') prospectiveLessons = resolved
+    else if (mode === 'teacher') prospectiveLessons = [...appState.lessons.filter((lesson) => lesson.teacherId !== teacherId), ...resolved]
+    else {
+      const sourceToResolved = new Map(sourceLessons.map((lesson, index) => [lesson.id, resolved[index]!]))
+      prospectiveLessons = [...appState.lessons.map((lesson) => sourceToResolved.get(lesson.id) ?? lesson), ...sourceLessons.filter((lesson) => !appState.lessons.some((item) => item.id === lesson.id)).map((lesson) => sourceToResolved.get(lesson.id)!)]
+    }
+    const publishConflicts = findLabConflicts(prospectiveLessons, appState.students)
+    if (publishConflicts.length > 0) {
+      setNotice(`실제 시간표와 충돌해 반영할 수 없습니다. ${publishConflicts[0]?.message ?? ''}`)
+      return false
+    }
+    const now = new Date().toISOString()
+    setAppState((current) => {
+      const backup = { id: createId('schedule-backup'), label: `${koreanDateLabel(dateToInputValue(new Date()))} ${koreanTimeLabel(now)} 반영 전`, lessons: structuredClone(current.lessons), createdAt: now }
+      return { ...current, lessons: prospectiveLessons, scheduleBackups: [...current.scheduleBackups.slice(-4), backup] }
+    })
+    setView('schedule')
+    setNotice(`${draft.name} 시안을 실제 시간표에 반영했습니다. 필요하면 실험실에서 복구할 수 있습니다.`)
+    return true
+  }
+
+  const restoreScheduleBackup = () => {
+    const latest = appState.scheduleBackups.at(-1)
+    if (!latest || !window.confirm(`${latest.label} 시간표로 복구할까요?`)) return
+    setAppState((current) => ({ ...current, lessons: structuredClone(current.scheduleBackups.at(-1)?.lessons ?? current.lessons), scheduleBackups: current.scheduleBackups.slice(0, -1) }))
+    setNotice('실제 시간표를 반영 직전 상태로 복구했습니다.')
   }
 
   const deleteLesson = (lessonId: string) => {
@@ -3723,6 +3965,9 @@ export default function App() {
           <button type="button" className={view === 'schedule' ? 'active' : ''} onClick={() => setView('schedule')}>
             <LayoutDashboard size={18} /> 시간표
           </button>
+          <button type="button" className={view === 'lab' ? 'active' : ''} onClick={() => setView('lab')} title="Ctrl/⌘ + Shift + P">
+            <Beaker size={18} /> 시간표 실험실 <span>{labDrafts.length}</span>
+          </button>
           <button type="button" className={view === 'groups' ? 'active' : ''} onClick={() => setView('groups')}>
             <UsersRound size={18} /> 그룹 수업 <span>{groupSeries.length}</span>
           </button>
@@ -3806,6 +4051,7 @@ export default function App() {
             <span className="eyebrow">ACADEMY SCHEDULE</span>
             <h1>{view === 'schedule'
               ? (selectedStudent ? `${selectedStudent.name} · ${activeTeacherName}` : `${activeTeacherName} 시간표`)
+              : view === 'lab' ? '시간표 실험실'
               : view === 'groups'
                 ? `${activeTeacherName} 그룹 수업`
                 : view === 'attendance' ? '월별 출석 관리'
@@ -3813,14 +4059,16 @@ export default function App() {
                   : view === 'student' ? `${detailStudent?.name ?? ''} 학생 페이지` : '학생 관리'}</h1>
             <p>{view === 'schedule'
               ? (scheduleSettings.transportEnabled ? '매주 반복되는 수업과 차량 이용을 한눈에 확인하세요.' : '매주 반복되는 수업을 한눈에 확인하세요.')
+              : view === 'lab' ? '실제 운영 자료에 영향을 주지 않고 시간표 시안을 자유롭게 조합하세요.'
               : view === 'groups'
                 ? '그룹 일정과 참여 인원을 한곳에서 관리하세요.'
                 : view === 'attendance' ? '전체 원생의 월별 출결 현황과 미체크 수업을 확인하세요.'
                   : view === 'payments' ? '학생별 납부 여부와 결제금액, 결제일을 관리하세요.'
                   : view === 'student' ? '수업 현황과 피드백, Notion 연결을 관리하세요.' : '학생 정보와 개인별 수업 현황을 관리하세요.'}</p>
           </div>
+          <button type="button" className="mobile-lab-button" onClick={() => setView(view === 'lab' ? 'schedule' : 'lab')} aria-label={view === 'lab' ? '실제 시간표로 돌아가기' : '시간표 실험실 열기'}><Beaker size={17} /></button>
           <label className="mobile-teacher-select"><span className="sr-only">선생님 시간표</span><select value={activeTeacherId} onChange={(event) => { setActiveTeacherId(event.target.value as TeacherId); setView('schedule') }}>{TEACHERS.map((teacher) => <option value={teacher.id} key={teacher.id}>{scheduleSettings.teacherNames[teacher.index]}</option>)}</select></label>
-          {view !== 'attendance' && view !== 'payments' && (
+          {view !== 'attendance' && view !== 'payments' && view !== 'lab' && (
             <button type="button" className="button primary top-add" onClick={() => {
               if (view === 'students') setBulkStudentModalOpen(true)
               else if (view === 'groups') openNewLesson(undefined, undefined, 'group')
@@ -4036,6 +4284,21 @@ export default function App() {
               {scheduleSettings.transportEnabled && <StatCard icon={<Bus size={20} />} label="오늘 차량" value={todayRideCount} hint="이용 학생" tone="amber" />}
             </section>
           </>
+        ) : view === 'lab' ? (
+          <ScheduleLabPage
+            drafts={labDrafts}
+            liveLessons={appState.lessons}
+            students={appState.students}
+            settings={scheduleSettings}
+            teacherNames={scheduleSettings.teacherNames}
+            activeTeacherId={activeTeacherId}
+            backupLabel={appState.scheduleBackups.at(-1)?.label}
+            onCreate={createLabDraft}
+            onSaveDraft={saveLabDraft}
+            onDeleteDraft={deleteLabDraft}
+            onPublish={publishLabDraft}
+            onRestore={restoreScheduleBackup}
+          />
         ) : view === 'groups' ? (
           <GroupManagementPage
             series={groupSeries}

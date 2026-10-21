@@ -6,6 +6,7 @@ export type PaymentMethod = 'card' | 'qr' | 'transfer' | 'cash'
 export type EnrollmentStatus = 'active' | 'paused' | 'withdrawn'
 export type LearningRecordType = 'consultation' | 'score' | 'homework' | 'progress' | 'preparation'
 export type MakeupStatus = 'pending' | 'scheduled' | 'completed'
+export type DraftVisibility = 'local' | 'shared'
 
 export type Transport = {
   arrivalRide: boolean
@@ -138,6 +139,32 @@ export type MakeupRecord = {
   updatedAt: string
 }
 
+export type DraftStudent = {
+  id: string
+  name: string
+  school: string
+  grade: string
+  color: string
+}
+
+export type ScheduleDraft = {
+  id: string
+  name: string
+  visibility: DraftVisibility
+  lessons: Lesson[]
+  virtualStudents: DraftStudent[]
+  virtualMappings: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type ScheduleBackup = {
+  id: string
+  label: string
+  lessons: Lesson[]
+  createdAt: string
+}
+
 export type AppState = {
   schemaVersion: 1
   students: Student[]
@@ -148,6 +175,8 @@ export type AppState = {
   weeklyMemos: WeeklyMemo[]
   holidayClosures: HolidayClosure[]
   makeupRecords: MakeupRecord[]
+  labDrafts: ScheduleDraft[]
+  scheduleBackups: ScheduleBackup[]
 }
 
 export type WeekendMode = 'hidden' | 'combined' | 'separate'
