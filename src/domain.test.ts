@@ -10,6 +10,7 @@ import {
   getKoreanInitials,
   getDefaultLessonColor,
   getDefaultTuition,
+  getTuitionBreakdown,
   getLessonColor,
   getStudentGradeGroup,
   gradeGroupSortValue,
@@ -168,6 +169,13 @@ describe('기본 원비', () => {
   it('학생에게 저장한 수강과목을 수업명보다 우선 적용한다', () => {
     expect(getDefaultTuition({ ...middle, subjects: ['korean'] }, tuitionLessons)).toBe(DEFAULT_TUITION_AMOUNTS.middleKorean)
     expect(getDefaultTuition({ ...high, subjects: ['korean', 'math'] }, [])).toBe(DEFAULT_TUITION_AMOUNTS.highKorean + DEFAULT_TUITION_AMOUNTS.highMath)
+  })
+
+  it('원비 총액을 국어와 수학으로 나눠 보여줄 수 있다', () => {
+    expect(getTuitionBreakdown({ ...middle, subjects: ['math', 'korean'] }, [])).toEqual([
+      { subject: 'korean', label: '국어', amount: DEFAULT_TUITION_AMOUNTS.middleKorean },
+      { subject: 'math', label: '수학', amount: DEFAULT_TUITION_AMOUNTS.middleMath },
+    ])
   })
 })
 

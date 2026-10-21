@@ -373,6 +373,12 @@ export const DEFAULT_TUITION_AMOUNTS = {
   highKorean: 270000,
 } as const
 
+export type TuitionBreakdownItem = {
+  subject: StudentSubject
+  label: string
+  amount: number
+}
+
 export function inferStudentSubjects(student: Student, lessons: Lesson[]): StudentSubject[] {
   const studentLessons = lessonsForStudent(lessons, student.id)
   const subjects: StudentSubject[] = []
@@ -386,22 +392,29 @@ export function getStudentSubjects(student: Student, lessons: Lesson[]): Student
   return student.subjects.length > 0 ? student.subjects : inferStudentSubjects(student, lessons)
 }
 
-export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
+export function getTuitionBreakdown(student: Student, lessons: Lesson[]): TuitionBreakdownItem[] {
   const gradeGroup = getStudentGradeGroup(student)
   const subjects = getStudentSubjects(student, lessons)
-  const hasMath = subjects.includes('math')
-  const hasKorean = subjects.includes('korean')
-  let amount = 0
-  if (hasMath) {
-    if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highMath
-    else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleMath
-    else if (gradeGroup.startsWith('초')) amount += DEFAULT_TUITION_AMOUNTS.elementaryMath
+  const breakdown: TuitionBreakdownItem[] = []
+  if (subjects.includes('korean')) {
+    const amount = gradeGroup.startsWith('고')
+      ? DEFAULT_TUITION_AMOUNTS.highKorean
+      : gradeGroup.startsWith('중') ? DEFAULT_TUITION_AMOUNTS.middleKorean : 0
+    if (amount > 0) breakdown.push({ subject: 'korean', label: '국어', amount })
   }
-  if (hasKorean) {
-    if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highKorean
-    else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleKorean
+  if (subjects.includes('math')) {
+    const amount = gradeGroup.startsWith('고')
+      ? DEFAULT_TUITION_AMOUNTS.highMath
+      : gradeGroup.startsWith('중')
+        ? DEFAULT_TUITION_AMOUNTS.middleMath
+        : gradeGroup.startsWith('초') ? DEFAULT_TUITION_AMOUNTS.elementaryMath : 0
+    if (amount > 0) breakdown.push({ subject: 'math', label: '수학', amount })
   }
-  return amount
+  return breakdown
+}
+
+export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
+  return getTuitionBreakdown(student, lessons).reduce((total, item) => total + item.amount, 0)
 }
 
 export function getDefaultLessonColor(studentIds: string[], students: Student[], lessonLabel = ''): string {

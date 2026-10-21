@@ -70,6 +70,7 @@ import {
   getLessonColor,
   getStudentSubjects,
   getStudentGradeGroup,
+  getTuitionBreakdown,
   gradeGroupSortValue,
   getScheduleColumns,
   getTodayWeekday,
@@ -2369,6 +2370,14 @@ function formatWon(amount: number): string {
   return `${new Intl.NumberFormat('ko-KR').format(amount)}원`
 }
 
+function formatCompactWon(amount: number): string {
+  if (!Number.isFinite(amount)) return '—'
+  if (Math.abs(amount) >= 10000) {
+    return `${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 }).format(amount / 10000)}만`
+  }
+  return formatWon(amount)
+}
+
 function paymentPartTotal(partAmounts: Record<PaymentMethod, string>): number {
   return PAYMENT_METHODS.reduce((total, method) => {
     const amount = Number(partAmounts[method.value])
@@ -2415,7 +2424,7 @@ function PaymentMethodModal({
       return
     }
     if (remaining !== null && remaining < 0) {
-      setError(`결제방법 합계가 원비보다 ${formatWon(Math.abs(remaining))} 많습니다.`)
+      setError(`결제방법 합계가 원비보다 ${formatCompactWon(Math.abs(remaining))} 많습니다.`)
       return
     }
     onApply(amounts)
@@ -2426,9 +2435,9 @@ function PaymentMethodModal({
       <form onSubmit={apply}>
         <div className="modal-body payment-method-modal-body">
           <section className="payment-method-summary">
-            <div><span>원비</span><strong>{Number.isFinite(tuition) && tuition > 0 ? formatWon(tuition) : '미입력'}</strong></div>
-            <div><span>입력 합계</span><strong>{formatWon(total)}</strong></div>
-            <div className={remaining !== null && remaining !== 0 ? 'needs-payment' : ''}><span>남은 금액</span><strong>{remaining === null ? '—' : formatWon(Math.max(0, remaining))}</strong></div>
+            <div><span>원비</span><strong>{Number.isFinite(tuition) && tuition > 0 ? formatCompactWon(tuition) : '미입력'}</strong></div>
+            <div><span>입력 합계</span><strong>{formatCompactWon(total)}</strong></div>
+            <div className={remaining !== null && remaining !== 0 ? 'needs-payment' : ''}><span>남은 금액</span><strong>{remaining === null ? '—' : formatCompactWon(Math.max(0, remaining))}</strong></div>
           </section>
           <p className="payment-method-help">한 가지 방법만 입력하거나 여러 결제방법의 금액을 나눠 입력할 수 있습니다.</p>
           <div className="payment-method-list">
@@ -2459,6 +2468,59 @@ function PaymentMethodModal({
           <button type="button" className="button secondary" onClick={onClose}>취소</button>
           <button type="submit" className="button primary">결제방법 적용</button>
         </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
+function TuitionEditModal({
+  student,
+  lessons,
+  tuitionAmount,
+  onClose,
+  onApply,
+}: {
+  student: Student
+  lessons: Lesson[]
+  tuitionAmount: string
+  onClose: () => void
+  onApply: (amount: number) => void
+}) {
+  const automaticAmount = getDefaultTuition(student, lessons)
+  const breakdown = getTuitionBreakdown(student, lessons)
+  const currentAmount = Number(tuitionAmount)
+  const [amountInTenThousands, setAmountInTenThousands] = useState(() => (
+    Number.isFinite(currentAmount) ? String(currentAmount / 10000) : ''
+  ))
+  const [error, setError] = useState('')
+
+  const apply = (event: FormEvent) => {
+    event.preventDefault()
+    const amount = Number(amountInTenThousands) * 10000
+    if (amountInTenThousands.trim() === '' || !Number.isInteger(amount) || amount < 0) {
+      setError('만원 단위 금액을 숫자로 입력해 주세요. (예: 20 또는 20.5)')
+      return
+    }
+    onApply(amount)
+  }
+
+  return (
+    <ModalFrame title="원비 수정" eyebrow={`${student.name} · 수정 후 학생 행에서 저장`} onClose={onClose}>
+      <form onSubmit={apply}>
+        <div className="modal-body tuition-edit-modal-body">
+          <section className="tuition-edit-standard">
+            <div><span>학년·과목 기준 원비</span><strong>{formatCompactWon(automaticAmount)}</strong></div>
+            {breakdown.length > 0 && <p>{breakdown.map((item) => `${item.label} ${formatCompactWon(item.amount)}`).join(' + ')}</p>}
+          </section>
+          <label className="tuition-edit-field">
+            <span>적용할 원비</span>
+            <span className="tuition-edit-input"><input autoFocus type="number" min="0" step="0.1" inputMode="decimal" value={amountInTenThousands} onChange={(event) => { setAmountInTenThousands(event.target.value); setError('') }} aria-label={`${student.name} 원비`} /><em>만원</em></span>
+          </label>
+          <button type="button" className="tuition-reset-button" onClick={() => { setAmountInTenThousands(String(automaticAmount / 10000)); setError('') }}>학년·과목 기준 금액으로 되돌리기</button>
+          <p className="payment-method-help">여기서 적용한 뒤 결제관리 표의 저장 버튼을 눌러야 최종 저장됩니다.</p>
+          {error && <p className="form-error" role="alert">{error}</p>}
+        </div>
+        <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary">수정 내용 적용</button></footer>
       </form>
     </ModalFrame>
   )
@@ -2517,7 +2579,7 @@ function FamilyPaymentModal({
       return
     }
     if (methodTotal !== allocationTotal) {
-      setError(`결제방법 합계와 학생별 배분 합계가 같아야 합니다. 현재 ${formatWon(Math.abs(methodTotal - allocationTotal))} 차이입니다.`)
+      setError(`결제방법 합계와 학생별 배분 합계가 같아야 합니다. 현재 ${formatCompactWon(Math.abs(methodTotal - allocationTotal))} 차이입니다.`)
       return
     }
 
@@ -2561,9 +2623,9 @@ function FamilyPaymentModal({
         <div className="modal-body family-payment-modal-body">
           <p className="payment-method-help">학생별 원비는 그대로 유지됩니다. 이번에 낸 금액을 각 학생에게 배분하면 개인별 납부 여부가 자동 결정됩니다.</p>
           <section className="payment-method-summary">
-            <div><span>가족 원비 합계</span><strong>{formatWon(tuitionTotal)}</strong></div>
-            <div><span>학생별 배분</span><strong>{formatWon(allocationTotal)}</strong></div>
-            <div className={methodTotal !== allocationTotal ? 'needs-payment' : ''}><span>결제 입력 합계</span><strong>{formatWon(methodTotal)}</strong></div>
+            <div><span>가족 원비 합계</span><strong>{formatCompactWon(tuitionTotal)}</strong></div>
+            <div><span>학생별 배분</span><strong>{formatCompactWon(allocationTotal)}</strong></div>
+            <div className={methodTotal !== allocationTotal ? 'needs-payment' : ''}><span>결제 입력 합계</span><strong>{formatCompactWon(methodTotal)}</strong></div>
           </section>
           <label className="field family-payment-date"><span>결제일</span><div className="payment-day-input"><input type="number" min="1" max={paymentDaysInMonth(month).length} inputMode="numeric" value={paymentDayValue(dueDate, month)} onChange={(event) => { setDueDate(paymentDateFromDay(month, event.target.value)); setError('') }} placeholder="일" /><span>일</span></div></label>
           <fieldset className="family-allocation-list">
@@ -2574,10 +2636,10 @@ function FamilyPaymentModal({
               return (
                 <label key={student.id}>
                   <Avatar student={student} size="sm" />
-                  <span><strong>{student.name}</strong><small>{student.school} · {student.grade} / 원비 {formatWon(tuition)}</small></span>
+                  <span><strong>{student.name}</strong><small>{student.school} · {student.grade} / 원비 {formatCompactWon(tuition)}</small></span>
                   <input type="number" min="0" max={tuition} step="1000" value={allocations[student.id]} onChange={(event) => { setAllocations((current) => ({ ...current, [student.id]: event.target.value })); setError('') }} aria-label={`${student.name} 배분액`} />
                   <small>원</small>
-                  <em className={tuition > 0 && allocated === tuition ? 'paid' : ''}>{tuition > 0 && allocated === tuition ? '납부' : `미납 ${formatWon(Math.max(0, tuition - allocated))}`}</em>
+                  <em className={tuition > 0 && allocated === tuition ? 'paid' : ''}>{tuition > 0 && allocated === tuition ? '납부' : `미납 ${formatCompactWon(Math.max(0, tuition - allocated))}`}</em>
                 </label>
               )
             })}
@@ -2639,6 +2701,7 @@ function PaymentManagementPage({
   const [drafts, setDrafts] = useState<Record<string, PaymentDraft>>(() => paymentDraftsForMonth(students, lessons, records, month))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<string>>(() => new Set())
+  const [tuitionEditorStudentId, setTuitionEditorStudentId] = useState<string | null>(null)
   const [methodEditorStudentId, setMethodEditorStudentId] = useState<string | null>(null)
   const [familyPaymentId, setFamilyPaymentId] = useState<string | null>(null)
   const [receiptTarget, setReceiptTarget] = useState<string | 'all' | null>(null)
@@ -2697,11 +2760,11 @@ function PaymentManagementPage({
     }
     const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
     if (allocatedAmount > amount) {
-      setErrors((current) => ({ ...current, [student.id]: `결제방법 합계가 원비보다 ${formatWon(allocatedAmount - amount)} 많습니다.` }))
+      setErrors((current) => ({ ...current, [student.id]: `결제방법 합계가 원비보다 ${formatCompactWon(allocatedAmount - amount)} 많습니다.` }))
       return
     }
     if (draft.status === 'paid' && allocatedAmount !== amount) {
-      setErrors((current) => ({ ...current, [student.id]: `납부 처리하려면 결제방법 합계가 ${formatWon(amount)}이어야 합니다.` }))
+      setErrors((current) => ({ ...current, [student.id]: `납부 처리하려면 결제방법 합계가 ${formatCompactWon(amount)}이어야 합니다.` }))
       return
     }
     const paymentId = paymentRecordId(student.id, month)
@@ -2768,11 +2831,11 @@ function PaymentManagementPage({
 
       <div className="tuition-defaults" aria-label="기본 원비 안내">
         <strong>기본 원비</strong>
-        <span>초등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.elementaryMath)}</span>
-        <span>중등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.middleMath)}</span>
-        <span>고등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.highMath)}</span>
-        <span>중등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.middleKorean)}</span>
-        <span>고등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.highKorean)}</span>
+        <span>초등수학 {formatCompactWon(DEFAULT_TUITION_AMOUNTS.elementaryMath)}</span>
+        <span>중등수학 {formatCompactWon(DEFAULT_TUITION_AMOUNTS.middleMath)}</span>
+        <span>고등수학 {formatCompactWon(DEFAULT_TUITION_AMOUNTS.highMath)}</span>
+        <span>중등국어 {formatCompactWon(DEFAULT_TUITION_AMOUNTS.middleKorean)}</span>
+        <span>고등국어 {formatCompactWon(DEFAULT_TUITION_AMOUNTS.highKorean)}</span>
         <small>수강과목을 찾지 못하면 학년에 맞는 수학 원비가 자동 적용됩니다. 납부 완료·부분결제 학생은 일괄등록에서 제외됩니다.</small>
         <button type="button" className="button secondary tuition-bulk-button" disabled={autoTuitionStudents.length === 0} onClick={registerDefaultTuitions}><Check size={14} /> 학년별 원비 일괄등록 ({autoTuitionStudents.length})</button>
       </div>
@@ -2782,7 +2845,7 @@ function PaymentManagementPage({
           <header><div><UsersRound size={17} /><strong>가족 합산 결제</strong></div><small>학생별 원비와 납부 상태는 따로 유지됩니다.</small></header>
           <div>{familyGroups.map((members) => (
             <button type="button" key={members[0]?.familyId} onClick={() => setFamilyPaymentId(members[0]?.familyId ?? null)}>
-              <span>{members.map((member) => member.name).join(' · ')}</span><strong>{formatWon(members.reduce((total, member) => total + (Number(drafts[member.id]?.amount) || 0), 0))}</strong><em>합산 결제 →</em>
+              <span>{members.map((member) => member.name).join(' · ')}</span><strong>{formatCompactWon(members.reduce((total, member) => total + (Number(drafts[member.id]?.amount) || 0), 0))}</strong><em>합산 결제 →</em>
             </button>
           ))}</div>
         </section>
@@ -2791,8 +2854,8 @@ function PaymentManagementPage({
       <div className="attendance-summary-cards payment-summary-cards">
         <article><span>납부 완료</span><strong>{paidCount}</strong><small>{students.length}명 중</small></article>
         <article className={students.length - paidCount > 0 ? 'needs-check' : ''}><span>미납</span><strong>{students.length - paidCount}</strong><small>{students.length - paidCount > 0 ? '확인 필요' : '모두 납부'}</small></article>
-        <article><span>결제 예정액</span><strong>{formatWon(expectedAmount)}</strong><small>입력된 금액 합계</small></article>
-        <article><span>결제 입력액</span><strong>{formatWon(paidAmount)}</strong><small>결제방법별 합계</small></article>
+        <article><span>결제 예정액</span><strong>{formatCompactWon(expectedAmount)}</strong><small>입력된 금액 합계</small></article>
+        <article><span>결제 입력액</span><strong>{formatCompactWon(paidAmount)}</strong><small>결제방법별 합계</small></article>
       </div>
 
       <section className="payment-table-card">
@@ -2811,6 +2874,8 @@ function PaymentManagementPage({
                 const savedRecord = records.find((record) => record.studentId === student.id && record.month === month)
                 const selectedMethods = PAYMENT_METHODS.filter((method) => Number(draft.paymentPartAmounts[method.value]) > 0)
                 const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
+                const tuitionBreakdown = getTuitionBreakdown(student, lessons)
+                const tuitionAmount = Number(draft.amount)
                 return (
                   <tr key={student.id}>
                     <td>
@@ -2826,15 +2891,20 @@ function PaymentManagementPage({
                         <button type="button" className={draft.status === 'paid' ? 'active paid' : ''} aria-pressed={draft.status === 'paid'} onClick={() => updateDraft(student.id, { status: 'paid' })}>납부</button>
                       </div>
                     </td>
-                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
+                    <td>
+                      <div className="payment-tuition-cell">
+                        <div className="payment-tuition-total"><span>총</span><strong>{draft.amount.trim() && Number.isFinite(tuitionAmount) ? formatCompactWon(tuitionAmount) : '미설정'}</strong><button type="button" onClick={() => setTuitionEditorStudentId(student.id)}>수정</button></div>
+                        {tuitionBreakdown.length > 0 && <small>기준 {tuitionBreakdown.map((item) => `${item.label} ${formatCompactWon(item.amount)}`).join(' + ')}</small>}
+                      </div>
+                    </td>
                     <td><label className="payment-field payment-day-field"><span className="sr-only">{student.name} 결제일</span><span className="payment-day-input"><input type="number" min="1" max={paymentDaysInMonth(month).length} inputMode="numeric" value={paymentDayValue(draft.dueDate, month)} onChange={(event) => updateDraft(student.id, { dueDate: paymentDateFromDay(month, event.target.value) })} placeholder="일" /><span>일</span></span></label></td>
                     <td>
                       <div className="payment-method-cell">
                         {selectedMethods.length > 0 ? (
-                          <div className="payment-method-chips">{selectedMethods.map((method) => <span key={method.value}>{method.label} {formatWon(Number(draft.paymentPartAmounts[method.value]))}</span>)}</div>
+                          <div className="payment-method-chips">{selectedMethods.map((method) => <span key={method.value}>{method.label} {formatCompactWon(Number(draft.paymentPartAmounts[method.value]))}</span>)}</div>
                         ) : <small>미입력</small>}
                         <button type="button" onClick={() => setMethodEditorStudentId(student.id)}>{selectedMethods.length > 0 ? '수정' : '입력'}</button>
-                        {allocatedAmount > 0 && <em>합계 {formatWon(allocatedAmount)}</em>}
+                        {allocatedAmount > 0 && <em>합계 {formatCompactWon(allocatedAmount)}</em>}
                       </div>
                     </td>
                     <td>
@@ -2852,6 +2922,27 @@ function PaymentManagementPage({
           </table>
         </div>
       </section>
+      {tuitionEditorStudentId && (() => {
+        const student = studentById(students, tuitionEditorStudentId)
+        const draft = drafts[tuitionEditorStudentId]
+        if (!student || !draft) return null
+        return (
+          <TuitionEditModal
+            student={student}
+            lessons={lessons}
+            tuitionAmount={draft.amount}
+            onClose={() => setTuitionEditorStudentId(null)}
+            onApply={(amount) => {
+              const allocatedAmount = paymentPartTotal(draft.paymentPartAmounts)
+              updateDraft(student.id, {
+                amount: String(amount),
+                status: amount > 0 && allocatedAmount === amount ? 'paid' : 'unpaid',
+              })
+              setTuitionEditorStudentId(null)
+            }}
+          />
+        )
+      })()}
       {methodEditorStudentId && (() => {
         const student = studentById(students, methodEditorStudentId)
         const draft = drafts[methodEditorStudentId]
