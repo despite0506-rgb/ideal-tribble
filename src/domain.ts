@@ -377,8 +377,9 @@ export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
   const studentLessons = lessonsForStudent(lessons, student.id)
   const hasMath = studentLessons.some((lesson) => lesson.label.includes('수학'))
   const hasKorean = studentLessons.some((lesson) => lesson.label.includes('국어'))
+  const useGradeFallback = !hasMath && !hasKorean
   let amount = 0
-  if (hasMath) {
+  if (hasMath || useGradeFallback) {
     if (gradeGroup.startsWith('고')) amount += DEFAULT_TUITION_AMOUNTS.highMath
     else if (gradeGroup.startsWith('중')) amount += DEFAULT_TUITION_AMOUNTS.middleMath
     else if (gradeGroup.startsWith('초')) amount += DEFAULT_TUITION_AMOUNTS.elementaryMath
@@ -551,7 +552,8 @@ export function validateState(value: unknown): value is AppState {
       paymentKeys.add(paymentKey)
       if (payment.status !== 'paid' && payment.status !== 'unpaid') return false
       if (!Number.isInteger(payment.amount) || payment.amount < 0) return false
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
+      if (payment.dueDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate)) return false
+      if (payment.status === 'paid' && payment.dueDate === '') return false
       if (payment.paymentParts !== undefined) {
         if (!Array.isArray(payment.paymentParts)) return false
         const partIds = new Set<string>()

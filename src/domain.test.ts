@@ -157,6 +157,12 @@ describe('기본 원비', () => {
       { ...lesson('elementary-math-2', ['a'], 700, 760), label: '수학 심화' },
     ])).toBe(DEFAULT_TUITION_AMOUNTS.elementaryMath)
   })
+
+  it('수업명에서 과목을 찾지 못해도 학년에 맞는 수학 원비를 기본 적용한다', () => {
+    expect(getDefaultTuition(elementary, [])).toBe(DEFAULT_TUITION_AMOUNTS.elementaryMath)
+    expect(getDefaultTuition(middle, [{ ...lesson('middle-generic', ['b'], 600, 660), label: '중2 정규반' }])).toBe(DEFAULT_TUITION_AMOUNTS.middleMath)
+    expect(getDefaultTuition(high, [])).toBe(DEFAULT_TUITION_AMOUNTS.highMath)
+  })
 })
 
 describe('출석 날짜와 월별 집계', () => {
@@ -451,6 +457,8 @@ describe('저장 데이터 검증', () => {
       updatedAt: '2026-10-09T10:00:00.000Z',
     }]
     expect(validateState({ ...validState, paymentRecords })).toBe(true)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], status: 'unpaid', dueDate: '', paymentParts: [] }] })).toBe(true)
+    expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], dueDate: '' }] })).toBe(false)
     expect(validateState({ ...validState, paymentRecords: [{ ...paymentRecords[0], amount: -1 }] })).toBe(false)
     expect(validateState({
       ...validState,

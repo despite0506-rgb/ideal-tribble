@@ -2254,6 +2254,30 @@ type PaymentDraft = {
   paymentPartAmounts: Record<PaymentMethod, string>
 }
 
+function paymentDaysInMonth(month: string): number[] {
+  const [year, monthNumber] = month.split('-').map(Number)
+  if (!year || !monthNumber) return []
+  const lastDay = new Date(year, monthNumber, 0).getDate()
+  return Array.from({ length: lastDay }, (_, index) => index + 1)
+}
+
+function paymentDayValue(date: string, month: string): string {
+  if (!date.startsWith(`${month}-`)) return ''
+  const day = Number(date.slice(8, 10))
+  return Number.isInteger(day) && paymentDaysInMonth(month).includes(day) ? String(day) : ''
+}
+
+function paymentDateFromDay(month: string, dayValue: string): string {
+  const day = Number(dayValue)
+  if (!Number.isInteger(day) || !paymentDaysInMonth(month).includes(day)) return ''
+  return `${month}-${String(day).padStart(2, '0')}`
+}
+
+function paymentDayLabel(date: string): string {
+  const day = Number(date.slice(8, 10))
+  return Number.isInteger(day) && day > 0 ? `${day}일` : '—'
+}
+
 function emptyPaymentPartAmounts(): Record<PaymentMethod, string> {
   return { card: '', qr: '', transfer: '', cash: '' }
 }
@@ -2473,7 +2497,7 @@ function FamilyPaymentModal({
             <div><span>학생별 배분</span><strong>{formatWon(allocationTotal)}</strong></div>
             <div className={methodTotal !== allocationTotal ? 'needs-payment' : ''}><span>결제 입력 합계</span><strong>{formatWon(methodTotal)}</strong></div>
           </section>
-          <label className="field family-payment-date"><span>결제일</span><input type="date" value={dueDate} onChange={(event) => { setDueDate(event.target.value); setError('') }} /></label>
+          <label className="field family-payment-date"><span>결제일</span><select value={paymentDayValue(dueDate, month)} onChange={(event) => { setDueDate(paymentDateFromDay(month, event.target.value)); setError('') }}><option value="">일 선택</option>{paymentDaysInMonth(month).map((day) => <option value={day} key={day}>{day}일</option>)}</select></label>
           <fieldset className="family-allocation-list">
             <legend>학생별 배분</legend>
             {students.map((student) => {
@@ -2515,8 +2539,8 @@ function PaymentReceiptPrintView({ academyName, month, students, records, target
   const methodLabel = (method: PaymentMethod) => PAYMENT_METHODS.find((item) => item.value === method)?.label ?? method
   return (
     <section className="payment-receipt-print" aria-hidden="true">
-      {targetStudentId === 'all' && <section className="monthly-payment-audit-sheet"><header><strong>{academyName}</strong><h1>{koreanMonthLabel(month)} 원비 납부 명세</h1><p>교육청 감사 대비 월별 납부 확인 자료</p></header><table><thead><tr><th>학생</th><th>학교·학년</th><th>결제일</th><th>결제방법</th><th>금액</th></tr></thead><tbody>{paidRecords.map((record) => { const student = studentById(students, record.studentId); return <tr key={record.id}><td>{student?.name}</td><td>{student?.school} {student?.grade}</td><td>{record.dueDate}</td><td>{record.paymentParts.map((part) => `${methodLabel(part.method)} ${formatWon(part.amount)}`).join(' / ') || '기록 없음'}</td><td>{formatWon(record.amount)}</td></tr> })}</tbody><tfoot><tr><td colSpan={4}>납부 합계 ({paidRecords.length}명)</td><td>{formatWon(paidRecords.reduce((total, record) => total + record.amount, 0))}</td></tr></tfoot></table></section>}
-      {paidRecords.map((record) => { const student = studentById(students, record.studentId); if (!student) return null; return <article className="payment-receipt" key={record.id}><header><span>{academyName}</span><h1>원비 납부 확인서</h1><small>발급일 {dateToInputValue(new Date())}</small></header><dl><div><dt>학생명</dt><dd>{student.name}</dd></div><div><dt>학교 / 학년</dt><dd>{student.school || '—'} / {student.grade || '—'}</dd></div><div><dt>납부 대상월</dt><dd>{koreanMonthLabel(record.month)}</dd></div><div><dt>결제일</dt><dd>{record.dueDate}</dd></div><div><dt>납부 금액</dt><dd><strong>{formatWon(record.amount)}</strong></dd></div><div><dt>결제 방법</dt><dd>{record.paymentParts.map((part) => `${methodLabel(part.method)} ${formatWon(part.amount)}`).join(' · ') || '기록 없음'}</dd></div></dl><p>위 학생의 원비가 정상적으로 납부되었음을 확인합니다.</p><footer><span>{academyName}</span><strong>확인</strong></footer></article> })}
+      {targetStudentId === 'all' && <section className="monthly-payment-audit-sheet"><header><strong>{academyName}</strong><h1>{koreanMonthLabel(month)} 원비 납부 명세</h1><p>교육청 감사 대비 월별 납부 확인 자료</p></header><table><thead><tr><th>학생</th><th>학교·학년</th><th>결제일</th><th>결제방법</th><th>금액</th></tr></thead><tbody>{paidRecords.map((record) => { const student = studentById(students, record.studentId); return <tr key={record.id}><td>{student?.name}</td><td>{student?.school} {student?.grade}</td><td>{paymentDayLabel(record.dueDate)}</td><td>{record.paymentParts.map((part) => `${methodLabel(part.method)} ${formatWon(part.amount)}`).join(' / ') || '기록 없음'}</td><td>{formatWon(record.amount)}</td></tr> })}</tbody><tfoot><tr><td colSpan={4}>납부 합계 ({paidRecords.length}명)</td><td>{formatWon(paidRecords.reduce((total, record) => total + record.amount, 0))}</td></tr></tfoot></table></section>}
+      {paidRecords.map((record) => { const student = studentById(students, record.studentId); if (!student) return null; return <article className="payment-receipt" key={record.id}><header><span>{academyName}</span><h1>원비 납부 확인서</h1><small>발급일 {dateToInputValue(new Date())}</small></header><dl><div><dt>학생명</dt><dd>{student.name}</dd></div><div><dt>학교 / 학년</dt><dd>{student.school || '—'} / {student.grade || '—'}</dd></div><div><dt>납부 대상월</dt><dd>{koreanMonthLabel(record.month)}</dd></div><div><dt>결제일</dt><dd>{paymentDayLabel(record.dueDate)}</dd></div><div><dt>납부 금액</dt><dd><strong>{formatWon(record.amount)}</strong></dd></div><div><dt>결제 방법</dt><dd>{record.paymentParts.map((part) => `${methodLabel(part.method)} ${formatWon(part.amount)}`).join(' · ') || '기록 없음'}</dd></div></dl><p>위 학생의 원비가 정상적으로 납부되었음을 확인합니다.</p><footer><span>{academyName}</span><strong>확인</strong></footer></article> })}
     </section>
   )
 }
@@ -2539,7 +2563,7 @@ function PaymentManagementPage({
   sortMode: StudentSortMode
   onSortModeChange: (mode: StudentSortMode) => void
   onSave: (record: PaymentRecord) => void
-  onSaveMany: (records: PaymentRecord[]) => void
+  onSaveMany: (records: PaymentRecord[], noticeMessage?: string) => void
   onOpenStudent: (studentId: string) => void
 }) {
   const [month, setMonth] = useState(() => dateToInputValue(new Date()).slice(0, 7))
@@ -2551,6 +2575,10 @@ function PaymentManagementPage({
   const [familyPaymentId, setFamilyPaymentId] = useState<string | null>(null)
   const [receiptTarget, setReceiptTarget] = useState<string | 'all' | null>(null)
   const paidRecordsForMonth = records.filter((record) => record.month === month && record.status === 'paid')
+  const autoTuitionStudents = students.filter((student) => {
+    const record = records.find((item) => item.studentId === student.id && item.month === month)
+    return getDefaultTuition(student, lessons) > 0 && !dirtyStudentIds.has(student.id) && record?.status !== 'paid' && (!record || record.paymentParts.length === 0)
+  })
   const printReceipts = (target: string | 'all') => {
     setReceiptTarget(target)
     window.setTimeout(() => printPageMode('print-payment-receipts'), 0)
@@ -2595,7 +2623,7 @@ function PaymentManagementPage({
       setErrors((current) => ({ ...current, [student.id]: '결제금액을 원 단위 숫자로 입력해 주세요.' }))
       return
     }
-    if (!draft.dueDate) {
+    if (draft.status === 'paid' && !draft.dueDate) {
       setErrors((current) => ({ ...current, [student.id]: '결제일을 입력해 주세요.' }))
       return
     }
@@ -2631,6 +2659,32 @@ function PaymentManagementPage({
     })
   }
 
+  const registerDefaultTuitions = () => {
+    const updatedAt = new Date().toISOString()
+    const savedRecords = autoTuitionStudents.map((student) => {
+      const current = records.find((record) => record.studentId === student.id && record.month === month)
+      return {
+        id: paymentRecordId(student.id, month),
+        studentId: student.id,
+        month,
+        status: 'unpaid' as const,
+        amount: getDefaultTuition(student, lessons),
+        dueDate: current?.dueDate ?? '',
+        paymentParts: current?.paymentParts ?? [],
+        familyPaymentId: current?.familyPaymentId,
+        updatedAt,
+      }
+    })
+    if (savedRecords.length === 0) return
+    onSaveMany(savedRecords, `${savedRecords.length}명의 ${koreanMonthLabel(month)} 원비를 학년 기준으로 일괄 등록했습니다.`)
+    setErrors({})
+    setDirtyStudentIds((current) => {
+      const next = new Set(current)
+      savedRecords.forEach((record) => next.delete(record.studentId))
+      return next
+    })
+  }
+
   return (
     <section className="payment-page">
       <header className="payment-toolbar">
@@ -2651,7 +2705,8 @@ function PaymentManagementPage({
         <span>고등수학 {formatWon(DEFAULT_TUITION_AMOUNTS.highMath)}</span>
         <span>중등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.middleKorean)}</span>
         <span>고등국어 {formatWon(DEFAULT_TUITION_AMOUNTS.highKorean)}</span>
-        <small>학년과 등록된 수업명의 수학·국어를 기준으로 자동 입력됩니다. 두 과목 수강 시 합산됩니다.</small>
+        <small>수강과목을 찾지 못하면 학년에 맞는 수학 원비가 자동 적용됩니다. 납부 완료·부분결제 학생은 일괄등록에서 제외됩니다.</small>
+        <button type="button" className="button secondary tuition-bulk-button" disabled={autoTuitionStudents.length === 0} onClick={registerDefaultTuitions}><Check size={14} /> 학년별 원비 일괄등록 ({autoTuitionStudents.length})</button>
       </div>
 
       {familyGroups.length > 0 && (
@@ -2704,7 +2759,7 @@ function PaymentManagementPage({
                       </div>
                     </td>
                     <td><label className="payment-field"><span className="sr-only">{student.name} 결제금액</span><input type="number" min="0" step="1000" inputMode="numeric" value={draft.amount} onChange={(event) => updateDraft(student.id, { amount: event.target.value })} placeholder="금액" /></label></td>
-                    <td><label className="payment-field"><span className="sr-only">{student.name} 결제일</span><input type="date" value={draft.dueDate} onChange={(event) => updateDraft(student.id, { dueDate: event.target.value })} /></label></td>
+                    <td><label className="payment-field payment-day-field"><span className="sr-only">{student.name} 결제일</span><select value={paymentDayValue(draft.dueDate, month)} onChange={(event) => updateDraft(student.id, { dueDate: paymentDateFromDay(month, event.target.value) })}><option value="">일 선택</option>{paymentDaysInMonth(month).map((day) => <option value={day} key={day}>{day}일</option>)}</select></label></td>
                     <td>
                       <div className="payment-method-cell">
                         {selectedMethods.length > 0 ? (
@@ -3695,13 +3750,13 @@ export default function App() {
     setNotice(`${student?.name ?? '학생'}의 ${koreanMonthLabel(payment.month)} 결제 정보를 저장했습니다.`)
   }
 
-  const saveFamilyPayments = (payments: PaymentRecord[]) => {
+  const saveFamilyPayments = (payments: PaymentRecord[], noticeMessage?: string) => {
     const savedIds = new Set(payments.map((payment) => payment.id))
     setAppState((current) => ({
       ...current,
       paymentRecords: [...current.paymentRecords.filter((record) => !savedIds.has(record.id)), ...payments],
     }))
-    setNotice(`${payments.map((payment) => studentById(appState.students, payment.studentId)?.name).filter(Boolean).join(' · ')} 가족의 ${koreanMonthLabel(payments[0]?.month ?? '')} 결제를 저장했습니다.`)
+    setNotice(noticeMessage ?? `${payments.map((payment) => studentById(appState.students, payment.studentId)?.name).filter(Boolean).join(' · ')} 가족의 ${koreanMonthLabel(payments[0]?.month ?? '')} 결제를 저장했습니다.`)
   }
 
   const saveFamilyLinks = (studentId: string, memberIds: string[]) => {
