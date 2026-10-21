@@ -1458,21 +1458,18 @@ body.sidebar-resizing {
   min-height: 34px;
   overflow: hidden;
   padding: 6px 7px;
-  border: 1px solid rgba(81, 115, 108, 0.16);
-  border-left: 3px solid var(--lesson-color, var(--brand));
-  border-radius: 7px;
+  border: 1px solid rgba(81, 115, 108, 0.1);
+  border-radius: 0;
   color: var(--text);
   background: color-mix(in srgb, var(--lesson-color, var(--brand)) 34%, white);
-  box-shadow: 0 1px 3px rgba(18, 38, 32, 0.08);
+  box-shadow: none;
   cursor: pointer;
   text-align: left;
   transition: z-index 0s, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .lesson-card.group {
-  border-color: color-mix(in srgb, var(--lesson-color, var(--purple)) 38%, white);
-  border-right: 3px solid var(--lesson-color-2, var(--purple));
-  border-left: 3px solid var(--lesson-color, var(--purple));
+  border-color: rgba(81, 91, 115, 0.11);
   background: linear-gradient(135deg,
     color-mix(in srgb, var(--lesson-color, var(--purple)) 38%, white),
     color-mix(in srgb, var(--lesson-color-2, var(--purple)) 30%, white));
@@ -1481,13 +1478,13 @@ body.sidebar-resizing {
 .lesson-card:hover,
 .lesson-card:focus-visible {
   z-index: 5;
-  border-color: rgba(20, 108, 99, 0.48);
-  box-shadow: 0 7px 18px rgba(18, 38, 32, 0.17);
+  border-color: rgba(81, 115, 108, 0.22);
+  box-shadow: 0 4px 11px rgba(18, 38, 32, 0.1);
   transform: translateY(-1px);
 }
 
 .lesson-card.is-focused {
-  box-shadow: inset 0 0 0 1px rgba(20, 108, 99, 0.13), 0 2px 5px rgba(18, 38, 32, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(20, 108, 99, 0.08);
 }
 
 .lesson-card-topline {
@@ -1698,18 +1695,15 @@ body.sidebar-resizing {
   width: 100%;
   min-height: 108px;
   padding: 11px 38px 10px 12px;
-  border: 1px solid #d5e7e2;
-  border-left: 4px solid var(--lesson-color, var(--brand));
-  border-radius: 9px;
+  border: 1px solid rgba(81, 115, 108, 0.11);
+  border-radius: 0;
   background: color-mix(in srgb, var(--lesson-color, var(--brand)) 28%, white);
   cursor: pointer;
   text-align: left;
 }
 
 .lesson-list-card.group {
-  border-color: color-mix(in srgb, var(--lesson-color, var(--purple)) 35%, white);
-  border-right: 4px solid var(--lesson-color-2, var(--purple));
-  border-left-color: var(--lesson-color, var(--purple));
+  border-color: rgba(81, 91, 115, 0.12);
   background: linear-gradient(135deg,
     color-mix(in srgb, var(--lesson-color, var(--purple)) 32%, white),
     color-mix(in srgb, var(--lesson-color-2, var(--purple)) 25%, white));
