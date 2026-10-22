@@ -2550,11 +2550,12 @@ function TuitionEditModal({
         <div className="modal-body tuition-edit-modal-body">
           <section className="tuition-edit-standard">
             <div><span>현재 원비 합계</span><strong>{formatCompactWon(currentTotal)}</strong></div>
+            <p aria-live="polite">{editableSubjects.map((item) => `${item.label} ${formatCompactWon((Number(amountsInTenThousands[item.value]) || 0) * 10000)}`).join(' + ')}</p>
           </section>
           <div className="tuition-subject-edit-list">
             {editableSubjects.map((item, index) => (
               <label className="tuition-edit-field" key={item.value}>
-                <span>{item.label}</span>
+                <span>{item.label} 원비</span>
                 <span className="tuition-edit-input"><input autoFocus={index === 0} type="number" min="0" step="0.1" inputMode="decimal" value={amountsInTenThousands[item.value] ?? ''} onChange={(event) => { setAmountsInTenThousands((current) => ({ ...current, [item.value]: event.target.value })); setError('') }} aria-label={`${student.name} ${item.label} 원비`} /><em>만원</em></span>
               </label>
             ))}
