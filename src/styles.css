@@ -3529,7 +3529,7 @@ button.selected-student-chip {
 .bulk-student-head,
 .bulk-student-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1.2fr) minmax(130px, 1fr) minmax(100px, .8fr) 38px;
+  grid-template-columns: minmax(120px, 1.2fr) minmax(120px, 1fr) minmax(90px, .75fr) minmax(105px, .85fr) 38px;
   gap: 8px;
 }
 
@@ -4817,6 +4817,10 @@ button.selected-student-chip {
   .bulk-student-head { display: none; }
   .bulk-student-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 38px; }
   .bulk-student-row > label:first-child { grid-column: 1 / -2; }
+  .bulk-student-row > label:nth-child(2) { grid-column: 1; }
+  .bulk-student-row > label:nth-child(3) { grid-column: 2; }
+  .bulk-student-row > label:nth-child(4) { grid-column: 1 / -2; }
+  .bulk-student-row > .icon-button { grid-column: 3; grid-row: 1; }
   .school-color-list fieldset { padding: 9px; }
   .school-color-options { gap: 7px; }
   .academy-name-setting { width: 100%; }

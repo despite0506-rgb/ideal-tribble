@@ -170,6 +170,7 @@ type BulkStudentRow = {
   name: string
   school: string
   grade: string
+  subjectChoice: StudentSubjectChoice
 }
 
 function gradeOptionsForSchool(school: string): string[] {
@@ -178,7 +179,7 @@ function gradeOptionsForSchool(school: string): string[] {
 }
 
 function createBulkStudentRow(): BulkStudentRow {
-  return { id: createId('student-row'), name: '', school: '청운초', grade: '1학년' }
+  return { id: createId('student-row'), name: '', school: '청운초', grade: '1학년', subjectChoice: 'math' }
 }
 
 function shiftDateValue(value: string, days: number): string {
@@ -1128,7 +1129,7 @@ function BulkStudentModal({
       name: row.name.trim(),
       school: row.school,
       grade: row.grade,
-      subjects: ['math'],
+      subjects: subjectsFromChoice(row.subjectChoice),
       color: schoolColors.get(row.school) ?? (() => {
         const color = STUDENT_COLORS[nextColorIndex % STUDENT_COLORS.length] ?? '#2f6f68'
         nextColorIndex += 1
@@ -1148,11 +1149,11 @@ function BulkStudentModal({
   }
 
   return (
-    <ModalFrame title="학생 일괄 등록" eyebrow="이름 · 학교 · 학년만 빠르게 입력" onClose={onClose} wide>
+    <ModalFrame title="학생 일괄 등록" eyebrow="이름 · 학교 · 학년 · 수강과목을 빠르게 입력" onClose={onClose} wide>
       <form onSubmit={submit}>
         <div className="modal-body">
           {error && <div className="form-error" role="alert"><strong>{error}</strong></div>}
-          <div className="bulk-student-head" aria-hidden="true"><span>이름</span><span>학교</span><span>학년</span><span /></div>
+          <div className="bulk-student-head" aria-hidden="true"><span>이름</span><span>학교</span><span>학년</span><span>수강과목</span><span /></div>
           <div className="bulk-student-rows">
             {rows.map((row, index) => (
               <div className="bulk-student-row" key={row.id}>
@@ -1174,6 +1175,12 @@ function BulkStudentModal({
                   <span className="sr-only">{index + 1}번째 학생 학년</span>
                   <select value={row.grade} onChange={(event) => updateRow(row.id, { grade: event.target.value })}>
                     {gradeOptionsForSchool(row.school).map((grade) => <option value={grade} key={grade}>{grade}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span className="sr-only">{index + 1}번째 학생 수강과목</span>
+                  <select value={row.subjectChoice} onChange={(event) => updateRow(row.id, { subjectChoice: event.target.value as StudentSubjectChoice })}>
+                    {STUDENT_SUBJECT_CHOICES.map((choice) => <option value={choice.value} key={choice.value}>{choice.label}</option>)}
                   </select>
                 </label>
                 <button type="button" className="icon-button" onClick={() => removeRow(row.id)} disabled={rows.length === 1} aria-label={`${index + 1}번째 입력 행 삭제`}><Trash2 size={16} /></button>
