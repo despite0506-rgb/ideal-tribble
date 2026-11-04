@@ -18,6 +18,7 @@ import {
   Download,
   ExternalLink,
   GitCompare,
+  GitMerge,
   LayoutDashboard,
   List,
   Link2,
@@ -712,14 +713,16 @@ function HolidayClosureModal({ closures, onClose, onAdd, onDelete }: { closures:
   )
 }
 
-function WeeklyOperationsPanel({ weekStart, memo, absences, makeups, closures, students, onSaveMemo, onUpdateMakeup, onAddHoliday, onDeleteHoliday }: {
+function WeeklyOperationsPanel({ weekStart, currentWeekStart, memo, absences, makeups, closures, students, onChangeWeek, onSaveMemo, onUpdateMakeup, onAddHoliday, onDeleteHoliday }: {
   weekStart: string
+  currentWeekStart: string
   memo: string
   absences: AttendanceRecord[]
   makeups: MakeupRecord[]
   closures: HolidayClosure[]
   students: Student[]
-  onSaveMemo: (note: string) => void
+  onChangeWeek: (weekStart: string) => void
+  onSaveMemo: (weekStart: string, note: string) => void
   onUpdateMakeup: (record: MakeupRecord) => void
   onAddHoliday: (date: string, name: string) => void
   onDeleteHoliday: (id: string) => void
@@ -727,13 +730,33 @@ function WeeklyOperationsPanel({ weekStart, memo, absences, makeups, closures, s
   const [note, setNote] = useState(memo)
   const [holidayOpen, setHolidayOpen] = useState(false)
   useEffect(() => setNote(memo), [memo, weekStart])
-  const visibleMakeups = [...makeups].filter((record) => record.status !== 'completed' || dateIsInWeek(record.completedDate ?? '', weekStart)).sort((a, b) => (a.scheduledDate ?? '9999').localeCompare(b.scheduledDate ?? '9999') || a.absenceDate.localeCompare(b.absenceDate))
+  const isCurrentWeek = weekStart === currentWeekStart
+  const isPreviousWeek = weekStart === shiftDateValue(currentWeekStart, -7)
+  const weekLabel = isCurrentWeek ? '이번 주' : isPreviousWeek ? '지난 주' : '선택한 주'
+  const changeWeek = (nextWeekStart: string) => {
+    if (note !== memo && !window.confirm('저장하지 않은 특이사항이 있습니다. 다른 주로 이동할까요?')) return
+    onChangeWeek(nextWeekStart)
+  }
+  const visibleMakeups = [...makeups].filter((record) => isCurrentWeek
+    ? record.status !== 'completed' || dateIsInWeek(record.completedDate ?? '', weekStart)
+    : dateIsInWeek(record.absenceDate, weekStart) || dateIsInWeek(record.completedDate ?? '', weekStart))
+    .sort((a, b) => (a.scheduledDate ?? '9999').localeCompare(b.scheduledDate ?? '9999') || a.absenceDate.localeCompare(b.absenceDate))
   return (
     <section className="weekly-operations-panel">
-      <header><div><TriangleAlert size={18} /><span><strong>이번 주 특이사항</strong><small>{koreanDateLabel(weekStart)}–{koreanDateLabel(shiftDateValue(weekStart, 6))}</small></span></div><button type="button" className="button secondary" onClick={() => setHolidayOpen(true)}><CalendarDays size={14} /> 공휴일 일괄 휴강</button></header>
+      <header>
+        <div className="weekly-operations-title"><TriangleAlert size={18} /><span><strong>{weekLabel} 특이사항</strong><small>{koreanDateLabel(weekStart)}–{koreanDateLabel(shiftDateValue(weekStart, 6))}</small></span></div>
+        <div className="weekly-operations-actions">
+          <div className="weekly-week-nav" aria-label="특이사항 주간 이동">
+            <button type="button" onClick={() => changeWeek(shiftDateValue(weekStart, -7))} aria-label="이전 주"><ChevronLeft size={14} /></button>
+            <button type="button" className={isCurrentWeek ? 'current' : ''} onClick={() => changeWeek(currentWeekStart)}>이번 주</button>
+            <button type="button" onClick={() => changeWeek(shiftDateValue(weekStart, 7))} aria-label="다음 주"><ChevronRight size={14} /></button>
+          </div>
+          <button type="button" className="button secondary" onClick={() => setHolidayOpen(true)}><CalendarDays size={14} /> 공휴일 일괄 휴강</button>
+        </div>
+      </header>
       <div className="weekly-operations-grid">
-        <div className="weekly-note-editor"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="상담 일정, 시험 기간, 차량 변동 등 이번 주 특이사항을 기록하세요." rows={2} /><button type="button" onClick={() => onSaveMemo(note)} disabled={note === memo}><Check size={14} /> 메모 저장</button></div>
-        <div className="weekly-alert-list"><h3>이번 주 결석 <span>{absences.length}</span></h3>{absences.map((record) => <div key={record.id}><span className={`attendance-count ${record.status}`}>{record.status === 'excused' ? '병' : '결'}</span><span><strong>{studentById(students, record.studentId)?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.date)} · {record.lessonLabel}{record.note ? ` · ${record.note}` : ''}</small></span></div>)}{absences.length === 0 && <p>이번 주 결석 기록이 없습니다.</p>}</div>
+        <div className="weekly-note-editor"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="상담 일정, 시험 기간, 차량 변동 등 이 주의 특이사항을 기록하세요." rows={2} /><button type="button" onClick={() => onSaveMemo(weekStart, note)} disabled={note === memo}><Check size={14} /> 메모 저장</button></div>
+        <div className="weekly-alert-list"><h3>주간 결석 <span>{absences.length}</span></h3>{absences.map((record) => <div key={record.id}><span className={`attendance-count ${record.status}`}>{record.status === 'excused' ? '병' : '결'}</span><span><strong>{studentById(students, record.studentId)?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.date)} · {record.lessonLabel}{record.note ? ` · ${record.note}` : ''}</small></span></div>)}{absences.length === 0 && <p>이 주의 결석 기록이 없습니다.</p>}</div>
         <div className="weekly-makeup-list"><h3>미완료 보강 <span>{visibleMakeups.filter((record) => record.status !== 'completed').length}</span></h3>{visibleMakeups.map((record) => {
           const student = studentById(students, record.studentId)
           return <article key={record.id} className={record.status}>
@@ -1617,6 +1640,115 @@ function AttendanceModal({
           <button type="button" className="button secondary" onClick={onClose}>닫기</button>
           <button type="submit" className="button primary"><ClipboardCheck size={16} /> 출석 저장</button>
         </footer>
+      </form>
+    </ModalFrame>
+  )
+}
+
+function MergeLessonsModal({
+  lessons,
+  students,
+  teacherId,
+  onClose,
+  onMerge,
+}: {
+  lessons: Lesson[]
+  students: Student[]
+  teacherId: TeacherId
+  onClose: () => void
+  onMerge: (sourceLessonIds: string[], lesson: Lesson) => void
+}) {
+  const sortedLessons = [...lessons].sort((a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute || a.label.localeCompare(b.label, 'ko'))
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [weekday, setWeekday] = useState<Weekday>(getTodayWeekday())
+  const [startTime, setStartTime] = useState('15:00')
+  const [endTime, setEndTime] = useState('16:00')
+  const [label, setLabel] = useState('통합 수업')
+  const [errors, setErrors] = useState<string[]>([])
+  const selectedLessons = sortedLessons.filter((lesson) => selectedIds.includes(lesson.id))
+  const participants = [...new Map(selectedLessons.flatMap((lesson) => lesson.participants).map((participant) => [participant.studentId, participant])).values()]
+
+  const toggleLesson = (lesson: Lesson) => {
+    setErrors([])
+    setSelectedIds((current) => {
+      if (current.includes(lesson.id)) return current.filter((id) => id !== lesson.id)
+      if (current.length === 0) {
+        setWeekday(lesson.weekday)
+        setStartTime(minutesToTime(lesson.startMinute))
+        setEndTime(minutesToTime(lesson.endMinute))
+        setLabel(lesson.label)
+      }
+      return [...current, lesson.id]
+    })
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (selectedIds.length < 2) {
+      setErrors(['합칠 수업을 2개 이상 선택해 주세요.'])
+      return
+    }
+    const startMinute = timeToMinutes(startTime)
+    const endMinute = timeToMinutes(endTime)
+    const draft: LessonDraft = {
+      kind: participants.length >= 2 ? 'group' : 'individual',
+      teacherId,
+      weekday,
+      startMinute,
+      endMinute,
+      label: label.trim() || '통합 수업',
+      note: selectedLessons.map((lesson) => lesson.note.trim()).filter(Boolean).join(' / '),
+      participants,
+      colorMode: 'auto',
+    }
+    const validationErrors = validateLesson(draft, students, lessons.filter((lesson) => !selectedIds.includes(lesson.id)))
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+    onMerge(selectedIds, { ...draft, id: createId('lesson'), createdAt: new Date().toISOString() })
+  }
+
+  return (
+    <ModalFrame title="수업 합치기" eyebrow="선택한 수업의 학생을 한 수업으로 합칩니다" onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="modal-body merge-lessons-modal-body">
+          <p className="payment-method-help">합친 뒤에는 선택한 기존 수업이 시간표에서 사라지고, 학생이 중복 없이 합쳐진 새 수업 하나가 만들어집니다. 기존 출석 기록은 유지됩니다.</p>
+          <div className="merge-lessons-layout">
+            <fieldset className="merge-lesson-picker">
+              <legend>합칠 수업 <span>{selectedIds.length}개 선택</span></legend>
+              <div>
+                {sortedLessons.map((lesson) => {
+                  const lessonStudents = lesson.participants.map((participant) => studentById(students, participant.studentId)?.name).filter(Boolean).join(' · ')
+                  const selected = selectedIds.includes(lesson.id)
+                  return (
+                    <label className={selected ? 'selected' : ''} key={lesson.id}>
+                      <input type="checkbox" checked={selected} onChange={() => toggleLesson(lesson)} />
+                      <span><strong>{lesson.label}</strong><small>{WEEKDAYS.find((day) => day.value === lesson.weekday)?.short} {minutesToTime(lesson.startMinute)}–{minutesToTime(lesson.endMinute)} · {lessonStudents}</small></span>
+                      <em>{lesson.participants.length}명</em>
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+            <section className="merge-lesson-result">
+              <header><strong>새 수업 설정</strong><span>{participants.length}명</span></header>
+              <label className="field"><span>수업 이름</span><input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 중2 통합 수학" /></label>
+              <label className="field"><span>요일</span><select value={weekday} onChange={(event) => setWeekday(Number(event.target.value) as Weekday)}>{WEEKDAYS.map((day) => <option value={day.value} key={day.value}>{day.long}</option>)}</select></label>
+              <div className="field-row">
+                <label className="field"><span>시작</span><input type="time" step={600} value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
+                <label className="field"><span>종료</span><input type="time" step={600} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
+              </div>
+              <div className="merge-participant-preview">
+                <strong>합쳐질 학생</strong>
+                <div>{participants.map((participant) => { const student = studentById(students, participant.studentId); return student ? <span key={student.id} style={{ '--student-color': student.color } as CSSProperties}>{student.name}</span> : null })}</div>
+                {participants.length === 0 && <small>왼쪽에서 수업을 선택해 주세요.</small>}
+              </div>
+            </section>
+          </div>
+          {errors.length > 0 && <div className="form-error" role="alert"><strong>합칠 수 없습니다.</strong><ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul></div>}
+        </div>
+        <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary" disabled={selectedIds.length < 2}><GitMerge size={15} /> {selectedIds.length}개 수업 합치기</button></footer>
       </form>
     </ModalFrame>
   )
@@ -3640,6 +3772,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scheduleFullscreen, setScheduleFullscreen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
+  const [mergeLessonsOpen, setMergeLessonsOpen] = useState(false)
   const [attendanceModalLessonId, setAttendanceModalLessonId] = useState<string | null>(null)
   const [copiedLessonId, setCopiedLessonId] = useState<string | null>(null)
   const lessonMoveHistoryRef = useRef<Lesson[]>([])
@@ -3650,6 +3783,7 @@ export default function App() {
   const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
   const [studentSubjectsModalOpen, setStudentSubjectsModalOpen] = useState(false)
   const [nameSettingsOpen, setNameSettingsOpen] = useState(false)
+  const [operationsWeekStart, setOperationsWeekStart] = useState(() => weekStartValue())
   const [notice, setNotice] = useState('')
   const cloud = useCloudSync({ appState, setAppState, scheduleSettings, setScheduleSettings })
 
@@ -3743,8 +3877,8 @@ export default function App() {
   )).length
   const currentMonth = dateToInputValue(new Date()).slice(0, 7)
   const currentWeekStart = weekStartValue()
-  const currentWeekMemo = appState.weeklyMemos.find((memo) => memo.weekStart === currentWeekStart)?.note ?? ''
-  const currentWeekAbsences = appState.attendanceRecords.filter((record) => dateIsInWeek(record.date, currentWeekStart) && (record.status === 'absent' || record.status === 'excused'))
+  const operationsWeekMemo = appState.weeklyMemos.find((memo) => memo.weekStart === operationsWeekStart)?.note ?? ''
+  const operationsWeekAbsences = appState.attendanceRecords.filter((record) => dateIsInWeek(record.date, operationsWeekStart) && (record.status === 'absent' || record.status === 'excused'))
   const currentMonthPaidCount = appState.paymentRecords.filter((record) => record.month === currentMonth && record.status === 'paid').length
 
   const openNewLesson = (presetWeekday?: Weekday, presetStudentId?: string, presetKind?: Lesson['kind']) => {
@@ -3777,6 +3911,17 @@ export default function App() {
     setNotice(savedLessons.length > 1
       ? `${savedLessons.length}개 요일에 수업을 저장했습니다.`
       : '수업을 시간표에 저장했습니다.')
+  }
+
+  const mergeLessons = (sourceLessonIds: string[], mergedLesson: Lesson) => {
+    const sourceIds = new Set(sourceLessonIds)
+    setAppState((current) => ({
+      ...current,
+      lessons: [...current.lessons.filter((lesson) => !sourceIds.has(lesson.id)), mergedLesson],
+    }))
+    setMergeLessonsOpen(false)
+    setSelectedStudentId('all')
+    setNotice(`${sourceLessonIds.length}개 수업을 ${mergedLesson.participants.length}명 통합 수업으로 합쳤습니다.`)
   }
 
   const moveLesson = (lessonId: string, weekday: Weekday, startMinute: number) => {
@@ -3933,10 +4078,10 @@ export default function App() {
     setNotice(`${koreanDateLabel(date)} 출석을 저장했습니다.`)
   }
 
-  const saveWeeklyMemo = (note: string) => {
+  const saveWeeklyMemo = (weekStart: string, note: string) => {
     const updatedAt = new Date().toISOString()
-    setAppState((current) => ({ ...current, weeklyMemos: [...current.weeklyMemos.filter((memo) => memo.weekStart !== currentWeekStart), { id: `weekly-memo:${currentWeekStart}`, weekStart: currentWeekStart, note: note.trim(), updatedAt }] }))
-    setNotice('이번 주 특이사항을 저장했습니다.')
+    setAppState((current) => ({ ...current, weeklyMemos: [...current.weeklyMemos.filter((memo) => memo.weekStart !== weekStart), { id: `weekly-memo:${weekStart}`, weekStart, note: note.trim(), updatedAt }] }))
+    setNotice(`${koreanDateLabel(weekStart)} 주간 특이사항을 저장했습니다.`)
   }
 
   const updateMakeup = (makeup: MakeupRecord) => {
@@ -4380,7 +4525,7 @@ export default function App() {
           </div>
         )}
 
-        {view === 'schedule' && <WeeklyOperationsPanel weekStart={currentWeekStart} memo={currentWeekMemo} absences={currentWeekAbsences} makeups={appState.makeupRecords} closures={appState.holidayClosures} students={appState.students} onSaveMemo={saveWeeklyMemo} onUpdateMakeup={updateMakeup} onAddHoliday={addHolidayClosure} onDeleteHoliday={deleteHolidayClosure} />}
+        {view === 'schedule' && <WeeklyOperationsPanel weekStart={operationsWeekStart} currentWeekStart={currentWeekStart} memo={operationsWeekMemo} absences={operationsWeekAbsences} makeups={appState.makeupRecords} closures={appState.holidayClosures} students={appState.students} onChangeWeek={setOperationsWeekStart} onSaveMemo={saveWeeklyMemo} onUpdateMakeup={updateMakeup} onAddHoliday={addHolidayClosure} onDeleteHoliday={deleteHolidayClosure} />}
 
         {view === 'schedule' ? (
           <>
@@ -4404,6 +4549,7 @@ export default function App() {
                   {scheduleSettings.transportEnabled && selectedStudent && <RidePills transport={selectedStudent.defaultTransport} />}
                   {canUndoLessonMove && <button type="button" className="schedule-settings-button undo-move-button" onClick={undoLessonMove} aria-keyshortcuts="Control+Z Meta+Z" title="마지막 드래그 이동 되돌리기 (Ctrl+Z / ⌘Z)"><RotateCcw size={15} /><span>이동 되돌리기</span></button>}
                   {copiedLessonId && <button type="button" className="schedule-settings-button paste-lesson-button" onClick={() => setLessonModal({ open: true, templateLessonId: copiedLessonId })}><Copy size={15} /><span>붙여넣기</span></button>}
+                  <button type="button" className="schedule-settings-button merge-lessons-button" disabled={teacherLessons.length < 2} onClick={() => setMergeLessonsOpen(true)} title={teacherLessons.length < 2 ? '합칠 수업이 2개 이상 필요합니다.' : '여러 수업의 학생을 합쳐 새 시간으로 설정'}><GitMerge size={15} /><span>수업 합치기</span></button>
                   <button type="button" className="schedule-settings-button" onClick={() => printPageMode('print-schedule')}><Download size={15} /><span>인쇄</span></button>
                   <button
                     type="button"
@@ -4696,6 +4842,7 @@ export default function App() {
           onDelete={deleteLesson}
         />
       )}
+      {mergeLessonsOpen && <MergeLessonsModal lessons={teacherLessons} students={appState.students} teacherId={activeTeacherId} onClose={() => setMergeLessonsOpen(false)} onMerge={mergeLessons} />}
       {activeAttendanceLesson && (
         <AttendanceModal
           key={activeAttendanceLesson.id}
