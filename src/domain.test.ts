@@ -390,6 +390,7 @@ describe('저장 데이터 검증', () => {
     attendanceSessions: [],
     paymentRecords: [],
     weeklyMemos: [],
+    weeklyTodos: [],
     holidayClosures: [],
     makeupRecords: [],
     labDrafts: [],

@@ -119,7 +119,21 @@ export type WeeklyMemo = {
   id: string
   weekStart: string
   note: string
+  schoolProgress?: string
+  studentNotes?: WeeklyStudentNote[]
   updatedAt: string
+}
+
+export type WeeklyStudentNote = {
+  studentId: string
+  note: string
+}
+
+export type WeeklyTodo = {
+  id: string
+  weekStart: string
+  text: string
+  completedWeek?: string
 }
 
 export type HolidayClosure = {
@@ -176,6 +190,7 @@ export type AppState = {
   attendanceSessions: AttendanceSession[]
   paymentRecords: PaymentRecord[]
   weeklyMemos: WeeklyMemo[]
+  weeklyTodos: WeeklyTodo[]
   holidayClosures: HolidayClosure[]
   makeupRecords: MakeupRecord[]
   labDrafts: ScheduleDraft[]

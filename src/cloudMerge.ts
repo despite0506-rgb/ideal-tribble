@@ -1,4 +1,5 @@
 import type { CloudPayload } from './cloud'
+import { weeklyNotes } from './weeklyRecords'
 
 function valuesMatch(first: unknown, second: unknown): boolean {
   return JSON.stringify(first) === JSON.stringify(second)
@@ -60,5 +61,14 @@ function mergeConcurrentValue(base: unknown, local: unknown, remote: unknown): u
 }
 
 export function mergeCloudPayload(base: CloudPayload, local: CloudPayload, remote: CloudPayload): CloudPayload {
-  return mergeConcurrentValue(base, local, remote) as CloudPayload
+  const baseIds = new Set(base.appState.weeklyMemos.map(({ id }) => id))
+  const remoteIds = new Set(remote.appState.weeklyMemos.map(({ id }) => id))
+  const concurrentNewMemos = local.appState.weeklyMemos
+    .filter(({ id }) => !baseIds.has(id) && remoteIds.has(id))
+    .map(({ id, weekStart }) => ({ id, weekStart, ...weeklyNotes(), updatedAt: '' }))
+  const mergeBase = concurrentNewMemos.length ? {
+    ...base,
+    appState: { ...base.appState, weeklyMemos: [...base.appState.weeklyMemos, ...concurrentNewMemos] },
+  } : base
+  return mergeConcurrentValue(mergeBase, local, remote) as CloudPayload
 }

@@ -87,8 +87,9 @@ import {
   validateLesson,
 } from './domain'
 import { loadLocalLabDrafts, loadScheduleSettings, loadState, resetState, saveLocalLabDrafts, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeeklyMemo, WeeklyTodo, WeekendMode } from './types'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
+import { applyWeeklyNotesEdits, fillFromPreviousWeek, todosForWeek, weeklyNotes, type WeeklyNotes } from './weeklyRecords'
 
 type View = 'schedule' | 'lab' | 'groups' | 'attendance' | 'payments' | 'students' | 'student'
 type ScheduleDisplay = 'timeline' | 'list'
@@ -713,28 +714,53 @@ function HolidayClosureModal({ closures, onClose, onAdd, onDelete }: { closures:
   )
 }
 
-function WeeklyOperationsPanel({ weekStart, currentWeekStart, memo, absences, makeups, closures, students, onChangeWeek, onSaveMemo, onUpdateMakeup, onAddHoliday, onDeleteHoliday }: {
+function WeeklyOperationsPanel({
+  weekStart, currentWeekStart, memo, previousMemo, todos, absences, makeups, closures, students,
+  onChangeWeek, onSaveMemo, onAddTodo, onToggleTodo, onDeleteTodo, onUpdateMakeup, onAddHoliday, onDeleteHoliday,
+}: {
   weekStart: string
   currentWeekStart: string
-  memo: string
+  memo?: WeeklyMemo
+  previousMemo?: WeeklyMemo
+  todos: WeeklyTodo[]
   absences: AttendanceRecord[]
   makeups: MakeupRecord[]
   closures: HolidayClosure[]
   students: Student[]
   onChangeWeek: (weekStart: string) => void
-  onSaveMemo: (weekStart: string, note: string) => void
+  onSaveMemo: (weekStart: string, base: WeeklyNotes, notes: WeeklyNotes) => void
+  onAddTodo: (weekStart: string, text: string) => void
+  onToggleTodo: (weekStart: string, id: string) => void
+  onDeleteTodo: (id: string) => void
   onUpdateMakeup: (record: MakeupRecord) => void
   onAddHoliday: (date: string, name: string) => void
   onDeleteHoliday: (id: string) => void
 }) {
-  const [note, setNote] = useState(memo)
+  const [draft, setDraft] = useState<{ base: WeeklyNotes; notes: WeeklyNotes } | null>(null)
+  const [selectedNoteStudentId, setSelectedNoteStudentId] = useState('')
+  const [todoText, setTodoText] = useState('')
   const [holidayOpen, setHolidayOpen] = useState(false)
-  useEffect(() => setNote(memo), [memo, weekStart])
+  const savedNotes = weeklyNotes(memo)
+  const notes = draft?.notes ?? savedNotes
+  const editNotes = (notes: WeeklyNotes) => setDraft({ base: draft?.base ?? savedNotes, notes })
+  const importedNotes = fillFromPreviousWeek(notes, weeklyNotes(previousMemo))
+  const hasChanges = Boolean(draft && JSON.stringify(notes) !== JSON.stringify(draft.base))
+  const canImport = JSON.stringify(notes) !== JSON.stringify(importedNotes)
+  const studentNote = notes.studentNotes.find(({ studentId }) => studentId === selectedNoteStudentId)?.note ?? ''
+  const visibleTodos = todosForWeek(todos, weekStart)
+  const updateStudentNote = (note: string) => {
+    const entry = { studentId: selectedNoteStudentId, note }
+    const studentNotes = studentNote
+      ? notes.studentNotes.map((item) => item.studentId === selectedNoteStudentId ? entry : item).filter((item) => item.note)
+      : [...notes.studentNotes, entry]
+    editNotes({ ...notes, studentNotes })
+  }
   const isCurrentWeek = weekStart === currentWeekStart
   const isPreviousWeek = weekStart === shiftDateValue(currentWeekStart, -7)
   const weekLabel = isCurrentWeek ? '이번 주' : isPreviousWeek ? '지난 주' : '선택한 주'
   const changeWeek = (nextWeekStart: string) => {
-    if (note !== memo && !window.confirm('저장하지 않은 특이사항이 있습니다. 다른 주로 이동할까요?')) return
+    if (nextWeekStart === weekStart) return
+    if ((hasChanges || todoText.trim()) && !window.confirm('저장하지 않은 기록이 있습니다. 다른 주로 이동할까요?')) return
     onChangeWeek(nextWeekStart)
   }
   const visibleMakeups = [...makeups].filter((record) => isCurrentWeek
@@ -744,28 +770,79 @@ function WeeklyOperationsPanel({ weekStart, currentWeekStart, memo, absences, ma
   return (
     <section className="weekly-operations-panel">
       <header>
-        <div className="weekly-operations-title"><TriangleAlert size={18} /><span><strong>{weekLabel} 특이사항</strong><small>{koreanDateLabel(weekStart)}–{koreanDateLabel(shiftDateValue(weekStart, 6))}</small></span></div>
+        <div className="weekly-operations-title"><ClipboardCheck size={20} /><span><strong>{weekLabel} 기록</strong><small>{koreanDateLabel(weekStart)}–{koreanDateLabel(shiftDateValue(weekStart, 6))}</small></span></div>
         <div className="weekly-operations-actions">
-          <div className="weekly-week-nav" aria-label="특이사항 주간 이동">
+          <div className="weekly-week-nav" aria-label="주간 기록 이동">
             <button type="button" onClick={() => changeWeek(shiftDateValue(weekStart, -7))} aria-label="이전 주"><ChevronLeft size={14} /></button>
             <button type="button" className={isCurrentWeek ? 'current' : ''} onClick={() => changeWeek(currentWeekStart)}>이번 주</button>
             <button type="button" onClick={() => changeWeek(shiftDateValue(weekStart, 7))} aria-label="다음 주"><ChevronRight size={14} /></button>
           </div>
+          <button type="button" className="button secondary" disabled={!canImport} onClick={() => editNotes(importedNotes)}><Copy size={14} /> 지난주 기록 불러오기</button>
           <button type="button" className="button secondary" onClick={() => setHolidayOpen(true)}><CalendarDays size={14} /> 공휴일 일괄 휴강</button>
         </div>
       </header>
       <div className="weekly-operations-grid">
-        <div className="weekly-note-editor"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="상담 일정, 시험 기간, 차량 변동 등 이 주의 특이사항을 기록하세요." rows={2} /><button type="button" onClick={() => onSaveMemo(weekStart, note)} disabled={note === memo}><Check size={14} /> 메모 저장</button></div>
-        <div className="weekly-alert-list"><h3>주간 결석 <span>{absences.length}</span></h3>{absences.map((record) => <div key={record.id}><span className={`attendance-count ${record.status}`}>{record.status === 'excused' ? '병' : '결'}</span><span><strong>{studentById(students, record.studentId)?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.date)} · {record.lessonLabel}{record.note ? ` · ${record.note}` : ''}</small></span></div>)}{absences.length === 0 && <p>이 주의 결석 기록이 없습니다.</p>}</div>
-        <div className="weekly-makeup-list"><h3>미완료 보강 <span>{visibleMakeups.filter((record) => record.status !== 'completed').length}</span></h3>{visibleMakeups.map((record) => {
-          const student = studentById(students, record.studentId)
-          return <article key={record.id} className={record.status}>
-            <span><strong>{student?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.absenceDate)} 결석 · {record.scheduledDate ? `${koreanDateLabel(record.scheduledDate)} 보강 예정` : '일정 미정'}</small></span>
-            <input type="date" value={record.scheduledDate ?? ''} onChange={(event) => onUpdateMakeup({ ...record, scheduledDate: event.target.value || undefined, status: event.target.value ? 'scheduled' : 'pending', updatedAt: new Date().toISOString() })} aria-label={`${student?.name} 보강 예정일`} />
-            <button type="button" className={record.status === 'completed' ? 'completed' : ''} onClick={() => onUpdateMakeup({ ...record, status: record.status === 'completed' ? (record.scheduledDate ? 'scheduled' : 'pending') : 'completed', completedDate: record.status === 'completed' ? undefined : dateToInputValue(new Date()), updatedAt: new Date().toISOString() })}>{record.status === 'completed' ? '완료 취소' : '보강 완료'}</button>
-          </article>
-        })}{visibleMakeups.length === 0 && <p>미완료 보강이 없습니다.</p>}</div>
+        <div className="weekly-note-editor">
+          <h3><BookOpen size={16} /> 학교 진도</h3>
+          <textarea aria-label="학교 진도" value={notes.schoolProgress} onChange={(event) => editNotes({ ...notes, schoolProgress: event.target.value })} placeholder="학교나 학년별 단원, 시험 범위를 기록하세요." rows={4} />
+        </div>
+        <div className="weekly-note-editor">
+          <h3><UsersRound size={16} /> 학생별 특이사항</h3>
+          <select aria-label="특이사항을 기록할 학생" value={selectedNoteStudentId} onChange={(event) => setSelectedNoteStudentId(event.target.value)}>
+            <option value="">학생 선택</option>
+            {students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
+            {notes.studentNotes.filter(({ studentId }) => !studentById(students, studentId)).map(({ studentId }) => <option key={studentId} value={studentId}>삭제된 학생</option>)}
+          </select>
+          {selectedNoteStudentId && <textarea aria-label="학생 특이사항" value={studentNote} onChange={(event) => updateStudentNote(event.target.value)} placeholder="상담, 과제, 차량 변동 등을 기록하세요." rows={3} />}
+          {notes.studentNotes.length > 0 && <ul className="weekly-student-notes">{notes.studentNotes.map(({ studentId, note }) => (
+            <li key={studentId}><button type="button" onClick={() => setSelectedNoteStudentId(studentId)}><strong>{studentById(students, studentId)?.name ?? '삭제된 학생'}</strong><span>{note}</span></button></li>
+          ))}</ul>}
+          {(notes.note || savedNotes.note) && <label className="weekly-legacy-note">기존 주간 메모
+            <textarea value={notes.note} onChange={(event) => editNotes({ ...notes, note: event.target.value })} rows={2} />
+          </label>}
+        </div>
+        <div className="weekly-todos">
+          <h3><Check size={16} /> Todo <small>{visibleTodos.filter((todo) => todo.completedWeek !== weekStart).length}개 미완료</small></h3>
+          <form onSubmit={(event) => {
+            event.preventDefault()
+            if (!todoText.trim()) return
+            onAddTodo(weekStart, todoText.trim())
+            setTodoText('')
+          }}>
+            <input aria-label="할 일" value={todoText} onChange={(event) => setTodoText(event.target.value)} placeholder="할 일 추가" required />
+            <button className="button secondary" type="submit" disabled={!todoText.trim()}><Plus size={15} /> 추가</button>
+          </form>
+          {visibleTodos.length === 0 ? <p>등록된 할 일이 없습니다.</p> : <ul>{visibleTodos.map((todo) => {
+            const completed = todo.completedWeek === weekStart
+            return <li key={todo.id}>
+              <label className={completed ? 'completed' : undefined}>
+                <input type="checkbox" checked={completed} disabled={Boolean(todo.completedWeek && !completed)} onChange={() => onToggleTodo(weekStart, todo.id)} />
+                <span>{todo.text}{todo.completedWeek && !completed
+                  ? <small>{koreanDateLabel(todo.completedWeek)} 주에 완료</small>
+                  : todo.weekStart < weekStart && <small>이월</small>}</span>
+              </label>
+              {todo.weekStart === weekStart && !todo.completedWeek && <button type="button" aria-label={`${todo.text} 삭제`} onClick={() => onDeleteTodo(todo.id)}><Trash2 size={14} /></button>}
+            </li>
+          })}</ul>}
+        </div>
       </div>
+      <div className="weekly-record-save">
+        <button className="button primary" type="button" disabled={!hasChanges} onClick={() => { if (draft) { onSaveMemo(weekStart, draft.base, draft.notes); setDraft(null) } }}><Check size={15} /> 기록 저장</button>
+      </div>
+      <details className="weekly-attendance">
+        <summary>결석 · 보강 <small>결석 {absences.length}건 · 미완료 보강 {visibleMakeups.filter((record) => record.status !== 'completed').length}건</small></summary>
+        <div className="weekly-attendance-grid">
+          <div className="weekly-alert-list"><h3>주간 결석 <span>{absences.length}</span></h3>{absences.map((record) => <div key={record.id}><span className={`attendance-count ${record.status}`}>{record.status === 'excused' ? '병' : '결'}</span><span><strong>{studentById(students, record.studentId)?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.date)} · {record.lessonLabel}{record.note ? ` · ${record.note}` : ''}</small></span></div>)}{absences.length === 0 && <p>이 주의 결석 기록이 없습니다.</p>}</div>
+          <div className="weekly-makeup-list"><h3>미완료 보강 <span>{visibleMakeups.filter((record) => record.status !== 'completed').length}</span></h3>{visibleMakeups.map((record) => {
+            const student = studentById(students, record.studentId)
+            return <article key={record.id} className={record.status}>
+              <span><strong>{student?.name ?? '삭제된 학생'}</strong><small>{koreanDateLabel(record.absenceDate)} 결석 · {record.scheduledDate ? `${koreanDateLabel(record.scheduledDate)} 보강 예정` : '일정 미정'}</small></span>
+              <input type="date" value={record.scheduledDate ?? ''} onChange={(event) => onUpdateMakeup({ ...record, scheduledDate: event.target.value || undefined, status: event.target.value ? 'scheduled' : 'pending', updatedAt: new Date().toISOString() })} aria-label={`${student?.name} 보강 예정일`} />
+              <button type="button" className={record.status === 'completed' ? 'completed' : ''} onClick={() => onUpdateMakeup({ ...record, status: record.status === 'completed' ? (record.scheduledDate ? 'scheduled' : 'pending') : 'completed', completedDate: record.status === 'completed' ? undefined : dateToInputValue(new Date()), updatedAt: new Date().toISOString() })}>{record.status === 'completed' ? '완료 취소' : '보강 완료'}</button>
+            </article>
+          })}{visibleMakeups.length === 0 && <p>보강 기록이 없습니다.</p>}</div>
+        </div>
+      </details>
       {holidayOpen && <HolidayClosureModal closures={closures} onClose={() => setHolidayOpen(false)} onAdd={(date, name) => { onAddHoliday(date, name); setHolidayOpen(false) }} onDelete={onDeleteHoliday} />}
     </section>
   )
@@ -3877,7 +3954,9 @@ export default function App() {
   )).length
   const currentMonth = dateToInputValue(new Date()).slice(0, 7)
   const currentWeekStart = weekStartValue()
-  const operationsWeekMemo = appState.weeklyMemos.find((memo) => memo.weekStart === operationsWeekStart)?.note ?? ''
+  const operationsWeekMemo = appState.weeklyMemos.find((memo) => memo.weekStart === operationsWeekStart)
+  const previousOperationsWeek = shiftDateValue(operationsWeekStart, -7)
+  const previousOperationsMemo = appState.weeklyMemos.find((memo) => memo.weekStart === previousOperationsWeek)
   const operationsWeekAbsences = appState.attendanceRecords.filter((record) => dateIsInWeek(record.date, operationsWeekStart) && (record.status === 'absent' || record.status === 'excused'))
   const currentMonthPaidCount = appState.paymentRecords.filter((record) => record.month === currentMonth && record.status === 'paid').length
 
@@ -4078,10 +4157,46 @@ export default function App() {
     setNotice(`${koreanDateLabel(date)} 출석을 저장했습니다.`)
   }
 
-  const saveWeeklyMemo = (weekStart: string, note: string) => {
+  const saveWeeklyMemo = (weekStart: string, base: WeeklyNotes, notes: WeeklyNotes) => {
     const updatedAt = new Date().toISOString()
-    setAppState((current) => ({ ...current, weeklyMemos: [...current.weeklyMemos.filter((memo) => memo.weekStart !== weekStart), { id: `weekly-memo:${weekStart}`, weekStart, note: note.trim(), updatedAt }] }))
-    setNotice(`${koreanDateLabel(weekStart)} 주간 특이사항을 저장했습니다.`)
+    setAppState((current) => {
+      const existing = current.weeklyMemos.find((memo) => memo.weekStart === weekStart)
+      const memo = {
+        id: existing?.id ?? `weekly-memo:${weekStart}`,
+        weekStart,
+        ...applyWeeklyNotesEdits(weeklyNotes(existing), base, notes),
+        updatedAt,
+      }
+      return {
+        ...current,
+        weeklyMemos: existing
+          ? current.weeklyMemos.map((item) => item.id === existing.id ? memo : item)
+          : [...current.weeklyMemos, memo],
+      }
+    })
+    setNotice(`${koreanDateLabel(weekStart)} 주간 기록을 저장했습니다.`)
+  }
+
+  const addWeeklyTodo = (weekStart: string, text: string) => {
+    const todo = { id: createId('weekly-todo'), weekStart, text }
+    setAppState((current) => ({ ...current, weeklyTodos: [...current.weeklyTodos, todo] }))
+  }
+
+  const toggleWeeklyTodo = (weekStart: string, id: string) => {
+    setAppState((current) => ({
+      ...current,
+      weeklyTodos: current.weeklyTodos.map((todo) => {
+        if (todo.id !== id || weekStart < todo.weekStart || (todo.completedWeek && todo.completedWeek !== weekStart)) return todo
+        return { ...todo, completedWeek: todo.completedWeek ? undefined : weekStart }
+      }),
+    }))
+  }
+
+  const deleteWeeklyTodo = (id: string) => {
+    setAppState((current) => ({
+      ...current,
+      weeklyTodos: current.weeklyTodos.filter((todo) => todo.id !== id || todo.completedWeek),
+    }))
   }
 
   const updateMakeup = (makeup: MakeupRecord) => {
@@ -4525,7 +4640,26 @@ export default function App() {
           </div>
         )}
 
-        {view === 'schedule' && <WeeklyOperationsPanel weekStart={operationsWeekStart} currentWeekStart={currentWeekStart} memo={operationsWeekMemo} absences={operationsWeekAbsences} makeups={appState.makeupRecords} closures={appState.holidayClosures} students={appState.students} onChangeWeek={setOperationsWeekStart} onSaveMemo={saveWeeklyMemo} onUpdateMakeup={updateMakeup} onAddHoliday={addHolidayClosure} onDeleteHoliday={deleteHolidayClosure} />}
+        {view === 'schedule' && <WeeklyOperationsPanel
+          key={operationsWeekStart}
+          weekStart={operationsWeekStart}
+          currentWeekStart={currentWeekStart}
+          memo={operationsWeekMemo}
+          previousMemo={previousOperationsMemo}
+          todos={appState.weeklyTodos}
+          absences={operationsWeekAbsences}
+          makeups={appState.makeupRecords}
+          closures={appState.holidayClosures}
+          students={appState.students}
+          onChangeWeek={setOperationsWeekStart}
+          onSaveMemo={saveWeeklyMemo}
+          onAddTodo={addWeeklyTodo}
+          onToggleTodo={toggleWeeklyTodo}
+          onDeleteTodo={deleteWeeklyTodo}
+          onUpdateMakeup={updateMakeup}
+          onAddHoliday={addHolidayClosure}
+          onDeleteHoliday={deleteHolidayClosure}
+        />}
 
         {view === 'schedule' ? (
           <>

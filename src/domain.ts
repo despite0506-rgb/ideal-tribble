@@ -611,6 +611,27 @@ export function validateState(value: unknown): value is AppState {
       if (!memo || typeof memo !== 'object' || typeof memo.id !== 'string' || ids.has(memo.id)) return false
       ids.add(memo.id)
       if (!/^\d{4}-\d{2}-\d{2}$/.test(memo.weekStart) || typeof memo.note !== 'string' || typeof memo.updatedAt !== 'string') return false
+      if (memo.schoolProgress !== undefined && typeof memo.schoolProgress !== 'string') return false
+      if (memo.studentNotes !== undefined) {
+        if (!Array.isArray(memo.studentNotes)) return false
+        const notedStudents = new Set<string>()
+        for (const entry of memo.studentNotes) {
+          if (!entry || typeof entry.studentId !== 'string' || typeof entry.note !== 'string' || notedStudents.has(entry.studentId)) return false
+          notedStudents.add(entry.studentId)
+        }
+      }
+    }
+  }
+  if (state.weeklyTodos !== undefined) {
+    if (!Array.isArray(state.weeklyTodos)) return false
+    const ids = new Set<string>()
+    for (const todo of state.weeklyTodos) {
+      if (!todo || typeof todo.id !== 'string' || ids.has(todo.id)) return false
+      ids.add(todo.id)
+      if (typeof todo.weekStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(todo.weekStart) || typeof todo.text !== 'string' || !todo.text.trim()) return false
+      if (todo.completedWeek !== undefined && (
+        typeof todo.completedWeek !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(todo.completedWeek) || todo.completedWeek < todo.weekStart
+      )) return false
     }
   }
   if (state.holidayClosures !== undefined) {

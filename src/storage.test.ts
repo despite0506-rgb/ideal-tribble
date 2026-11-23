@@ -9,13 +9,14 @@ describe('저장 자료 호환성', () => {
       attendanceSessions: _attendanceSessions,
       paymentRecords: _paymentRecords,
       weeklyMemos: _weeklyMemos,
+      weeklyTodos: _weeklyTodos,
       holidayClosures: _holidayClosures,
       makeupRecords: _makeupRecords,
       labDrafts: _labDrafts,
       scheduleBackups: _scheduleBackups,
       ...legacyState
     } = structuredClone(DEMO_STATE)
-    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [], paymentRecords: [], weeklyMemos: [], holidayClosures: [], makeupRecords: [], labDrafts: [], scheduleBackups: [] })
+    expect(parseAppState(legacyState)).toMatchObject({ attendanceRecords: [], attendanceSessions: [], paymentRecords: [], weeklyMemos: [], weeklyTodos: [], holidayClosures: [], makeupRecords: [], labDrafts: [], scheduleBackups: [] })
   })
 
   it('기존 수업은 자동 색상으로, 직접 지정한 색은 사용자 색상으로 구분한다', () => {

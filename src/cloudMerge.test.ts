@@ -130,3 +130,15 @@ describe('mergeCloudPayload', () => {
     expect(merged.scheduleSettings.academyName).toBe('새 학원 이름')
   })
 })
+
+it('combines independent notes when two devices create the same weekly record', () => {
+  const base = payload()
+  const local = structuredClone(base)
+  const remote = structuredClone(base)
+  const weekStart = '2026-10-19'
+  const memo = { id: 'weekly-memo:' + weekStart, weekStart, note: '', schoolProgress: '', studentNotes: [], updatedAt: weekStart }
+  const studentNotes = [{ studentId: base.appState.students[0]!.id, note: '상담 내용' }]
+  local.appState.weeklyMemos.push({ ...memo, schoolProgress: '2단원' })
+  remote.appState.weeklyMemos.push({ ...memo, studentNotes })
+  expect(mergeCloudPayload(base, local, remote).appState.weeklyMemos).toEqual([{ ...memo, schoolProgress: '2단원', studentNotes }])
+})

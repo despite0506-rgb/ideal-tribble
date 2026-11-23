@@ -58,7 +58,12 @@ export const normalizeState = (state: AppState): AppState => ({
     familyPaymentId: typeof record.familyPaymentId === 'string' && record.familyPaymentId ? record.familyPaymentId : undefined,
     updatedAt: record.updatedAt,
   })) : [],
-  weeklyMemos: Array.isArray(state.weeklyMemos) ? state.weeklyMemos : [],
+  weeklyMemos: Array.isArray(state.weeklyMemos) ? state.weeklyMemos.map((memo) => ({
+    ...memo,
+    schoolProgress: memo.schoolProgress ?? '',
+    studentNotes: memo.studentNotes ?? [],
+  })) : [],
+  weeklyTodos: Array.isArray(state.weeklyTodos) ? state.weeklyTodos : [],
   holidayClosures: Array.isArray(state.holidayClosures) ? state.holidayClosures : [],
   makeupRecords: Array.isArray(state.makeupRecords) ? state.makeupRecords : [],
   labDrafts: Array.isArray(state.labDrafts) ? state.labDrafts : [],

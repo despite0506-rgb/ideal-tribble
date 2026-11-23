@@ -63,6 +63,7 @@ export const DEMO_STATE: AppState = {
   attendanceSessions: [],
   paymentRecords: [],
   weeklyMemos: [],
+  weeklyTodos: [],
   holidayClosures: [],
   makeupRecords: [],
   labDrafts: [],
