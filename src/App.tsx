@@ -624,10 +624,16 @@ function LessonList({
 function StudentQuickLinks({
   students,
   assignedStudentIds,
+  teacherNames,
+  highlightedTeachers,
+  onToggleTeacher,
   onOpenStudent,
 }: {
   students: Student[]
   assignedStudentIds: Set<string>
+  teacherNames: ScheduleSettings['teacherNames']
+  highlightedTeachers: ReadonlySet<TeacherId>
+  onToggleTeacher: (teacherId: TeacherId) => void
   onOpenStudent: (studentId: string) => void
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
@@ -662,7 +668,11 @@ function StudentQuickLinks({
       <header>
         <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">학년별 학생</h2></div>
         <div className="student-quick-actions">
-          <span><i className="student-class-key" aria-hidden="true" />색상: 현재 선생님 반 · 흑백: 다른 반</span>
+          <div className="student-highlight-buttons" role="group" aria-label="선생님별 색상 표시">
+            {TEACHERS.map(({ id, index }) => (
+              <button type="button" key={id} aria-pressed={highlightedTeachers.has(id)} onClick={() => onToggleTeacher(id)}>{teacherNames[index]}</button>
+            ))}
+          </div>
           <button type="button" onClick={toggleAllGroups} aria-expanded={!allCollapsed}>{allCollapsed ? <ChevronDown size={11} /> : <ChevronRight size={11} />}{allCollapsed ? '전체 펼치기' : '전체 접기'}</button>
         </div>
       </header>
@@ -685,7 +695,7 @@ function StudentQuickLinks({
                     style={{ '--student-color': student.color } as CSSProperties}
                     key={student.id}
                     onClick={() => onOpenStudent(student.id)}
-                    aria-label={`${group.label} ${student.name}, ${assignedStudentIds.has(student.id) ? '현재 선생님 반' : '다른 선생님 반'}, 학생 페이지 열기`}
+                    aria-label={`${group.label} ${student.name}, 학생 페이지 열기`}
                   >
                     <span>{student.name}</span>
                   </button>
@@ -708,6 +718,12 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
 }) {
   const [dragged, setDragged] = useState<{ studentId: string; from: TeacherId } | null>(null)
   const [target, setTarget] = useState<TeacherId | null>(null)
+  const touchDrag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const teacherAtPoint = (x: number, y: number) => {
+    const id = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-roster-teacher]')?.dataset.rosterTeacher
+    return TEACHERS.find((teacher) => teacher.id === id)?.id ?? null
+  }
   const assigned = new Set<string>()
   const columns = TEACHERS.map(({ id, index }) => {
     const ids = new Set(lessons.filter((lesson) => lesson.teacherId === id).flatMap((lesson) => lesson.participants.map(({ studentId }) => studentId)))
@@ -719,10 +735,10 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
 
   return (
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
-      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 다른 선생님 반으로 끌거나 이동할 반을 선택하세요.</p></div></header>
-      <div className="teacher-roster-grid">
+      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 다른 선생님 반으로 끌어 옮기세요.</p></div></header>
+      <div className="teacher-roster-rows">
         {columns.map(({ id, name, members }) => (
-          <section key={id} className={`grade-group teacher-roster-column${target === id ? ' is-drop-target' : ''}`}
+          <section key={id} data-roster-teacher={id} className={`grade-group teacher-roster-row${target === id ? ' is-drop-target' : ''}`}
             onDragOver={(event) => {
               if (!dragged || dragged.from === id) return
               event.preventDefault()
@@ -742,25 +758,56 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
             <ul>
               {members.map((student) => (
                 <li key={student.id}>
-                  <button type="button" className="student-quick-button is-assigned" style={{ '--student-color': student.color } as CSSProperties}
+                  <button type="button" className={`student-quick-button is-assigned${dragged?.studentId === student.id && dragged.from === id ? ' is-dragging' : ''}`}
+                    style={{ '--student-color': student.color } as CSSProperties}
                     draggable onDragStart={(event) => {
                       event.dataTransfer.setData('text/plain', student.id)
                       event.dataTransfer.effectAllowed = 'move'
                       setDragged({ studentId: student.id, from: id })
-                    }} onDragEnd={endDrag} onClick={() => onOpenStudent(student.id)}>{student.name}</button>
-                  <select aria-label={`${student.name} 학생의 ${name} 반 이동`} value="" onChange={(event) => onMove(student.id, id, event.target.value as TeacherId)}>
-                    <option value="" disabled>반 이동</option>
-                    {columns.filter((column) => column.id !== id).map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
-                  </select>
+                    }} onDragEnd={endDrag}
+                    onPointerDown={(event) => {
+                      suppressClick.current = false
+                      if (event.pointerType !== 'touch' || !event.isPrimary) return
+                      touchDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+                      event.currentTarget.setPointerCapture(event.pointerId)
+                    }}
+                    onPointerMove={(event) => {
+                      const touch = touchDrag.current
+                      if (!touch || touch.pointerId !== event.pointerId) return
+                      if (!touch.moved && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 8) return
+                      if (!touch.moved) {
+                        touch.moved = true
+                        setDragged({ studentId: student.id, from: id })
+                      }
+                      const destination = teacherAtPoint(event.clientX, event.clientY)
+                      setTarget(destination === id ? null : destination)
+                    }}
+                    onPointerUp={(event) => {
+                      const touch = touchDrag.current
+                      if (!touch || touch.pointerId !== event.pointerId) return
+                      touchDrag.current = null
+                      if (!touch.moved) return
+                      suppressClick.current = true
+                      const destination = teacherAtPoint(event.clientX, event.clientY)
+                      endDrag()
+                      if (destination && destination !== id) onMove(student.id, id, destination)
+                    }}
+                    onPointerCancel={() => { touchDrag.current = null; endDrag() }}
+                    onClick={(event) => {
+                      if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
+                      suppressClick.current = false
+                    }}><span className="roster-grade">({getStudentGradeGroup(student)})</span><span>{student.name}</span></button>
                 </li>
               ))}
             </ul>
           </section>
         ))}
         {unassigned.length > 0 && (
-          <section className="grade-group">
+          <section className="grade-group teacher-roster-row">
             <header className="grade-group-head"><h3>미배정<span>{unassigned.length}명</span></h3></header>
-            <div>{unassigned.map((student) => <button type="button" className="student-quick-button is-unassigned" key={student.id} onClick={() => onOpenStudent(student.id)}>{student.name}</button>)}</div>
+            <ul>{unassigned.map((student) => (
+              <li key={student.id}><button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}><span className="roster-grade">({getStudentGradeGroup(student)})</span><span>{student.name}</span></button></li>
+            ))}</ul>
           </section>
         )}
       </div>
@@ -3941,6 +3988,16 @@ export default function App() {
   const [storageWarning, setStorageWarning] = useState(initial.warning)
   const [view, setView] = useState<View>('schedule')
   const [activeTeacherId, setActiveTeacherId] = useState<TeacherId>('teacher-1')
+  const [teacherHighlights, setTeacherHighlights] = useState<Set<TeacherId> | null>(null)
+  const highlightedTeachers = useMemo(() => teacherHighlights ?? new Set([activeTeacherId]), [teacherHighlights, activeTeacherId])
+  const toggleTeacherHighlight = (teacherId: TeacherId) => {
+    setTeacherHighlights((current) => {
+      const next = new Set(current ?? [activeTeacherId])
+      if (next.has(teacherId)) next.delete(teacherId)
+      else next.add(teacherId)
+      return next
+    })
+  }
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
@@ -4045,9 +4102,9 @@ export default function App() {
   const teacherLessons = useMemo(() => (
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
-  const activeTeacherStudentIds = useMemo(() => new Set(
-    teacherLessons.flatMap((lesson) => lesson.participants.map((participant) => participant.studentId)),
-  ), [teacherLessons])
+  const highlightedStudentIds = useMemo(() => new Set(
+    appState.lessons.filter((lesson) => highlightedTeachers.has(lesson.teacherId)).flatMap((lesson) => lesson.participants.map((participant) => participant.studentId)),
+  ), [appState.lessons, highlightedTeachers])
   const groupSeries = useMemo(() => groupLessonsBySeries(teacherLessons), [teacherLessons])
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
@@ -4554,6 +4611,7 @@ export default function App() {
     setSelectedStudentId('all')
     setDetailStudentId(null)
     setActiveTeacherId('teacher-1')
+    setTeacherHighlights(null)
     lessonMoveHistoryRef.current = []
     setCanUndoLessonMove(false)
     setNotice('예시 데이터로 초기화했습니다.')
@@ -4823,7 +4881,10 @@ export default function App() {
           <>
             <StudentQuickLinks
               students={sortedStudents}
-              assignedStudentIds={activeTeacherStudentIds}
+              assignedStudentIds={highlightedStudentIds}
+              teacherNames={scheduleSettings.teacherNames}
+              highlightedTeachers={highlightedTeachers}
+              onToggleTeacher={toggleTeacherHighlight}
               onOpenStudent={showStudentDetail}
             />
 
@@ -5056,7 +5117,14 @@ export default function App() {
               <button type="button" className="button secondary" aria-pressed={studentGrouping === 'teacher'} onClick={() => setStudentGrouping('teacher')}>선생님별 보기</button>
             </div>
             {studentGrouping === 'grade'
-              ? <StudentQuickLinks students={pageStudents} assignedStudentIds={activeTeacherStudentIds} onOpenStudent={showStudentDetail} />
+              ? <StudentQuickLinks
+                  students={pageStudents}
+                  assignedStudentIds={highlightedStudentIds}
+                  teacherNames={scheduleSettings.teacherNames}
+                  highlightedTeachers={highlightedTeachers}
+                  onToggleTeacher={toggleTeacherHighlight}
+                  onOpenStudent={showStudentDetail}
+                />
               : <StudentsByTeacher students={pageStudents} lessons={appState.lessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
