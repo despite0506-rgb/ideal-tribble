@@ -30,6 +30,7 @@ export type Student = {
   grade: string
   subjects: StudentSubject[]
   familyId?: string
+  rosterTeacherId?: TeacherId
   registrationDate: string
   enrollmentStatus: EnrollmentStatus
   guardianName: string

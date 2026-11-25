@@ -495,6 +495,7 @@ export function validateState(value: unknown): value is AppState {
     if (!student || typeof student !== 'object') return false
     if (typeof student.id !== 'string' || typeof student.name !== 'string' || student.name.trim() === '') return false
     if (student.subjects !== undefined && (!Array.isArray(student.subjects) || student.subjects.some((subject) => subject !== 'math' && subject !== 'korean') || new Set(student.subjects).size !== student.subjects.length)) return false
+    if (student.rosterTeacherId !== undefined && !['teacher-1', 'teacher-2', 'teacher-3'].includes(student.rosterTeacherId)) return false
     if (student.familyId !== undefined && (typeof student.familyId !== 'string' || student.familyId.trim() === '')) return false
     if (student.registrationDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(student.registrationDate)) return false
     if (student.enrollmentStatus !== undefined && !['active', 'paused', 'withdrawn'].includes(student.enrollmentStatus)) return false

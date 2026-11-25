@@ -5092,10 +5092,47 @@ button.selected-student-chip {
   background: #fff0c5;
 }
 
-.teacher-roster [draggable="true"] {
+.teacher-roster .roster-student {
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+.roster-drop-tray {
+  position: fixed;
+  z-index: 60;
+  inset-inline: 12px;
+  bottom: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: min(540px, calc(100% - 24px));
+  margin-inline: auto;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.roster-drop-tray > div {
+  display: grid;
+  min-height: 52px;
+  place-items: center;
+  padding: 6px;
+  border: 1px dashed var(--brand);
+  border-radius: 8px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.roster-drop-tray > .is-drop-target {
+  color: #fff;
+  background: var(--brand);
 }
 
 .teacher-roster .is-dragging {

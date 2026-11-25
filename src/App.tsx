@@ -718,116 +718,104 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
   lessons: Lesson[]
   teacherNames: ScheduleSettings['teacherNames']
   onOpenStudent: (id: string) => void
-  onMove: (studentId: string, from: TeacherId, to: TeacherId) => void
+  onMove: (studentId: string, from: TeacherId | null, to: TeacherId) => void
 }) {
-  const [dragged, setDragged] = useState<{ studentId: string; from: TeacherId } | null>(null)
+  const [dragged, setDragged] = useState<string | null>(null)
   const [target, setTarget] = useState<TeacherId | null>(null)
-  const touchDrag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null)
+  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const teacherAtPoint = (x: number, y: number) => {
     const id = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-roster-teacher]')?.dataset.rosterTeacher
     return TEACHERS.find((teacher) => teacher.id === id)?.id ?? null
   }
-  const assigned = new Set<string>()
-  const rosters = TEACHERS.map(({ id, index }) => {
-    const ids = new Set(lessons.filter((lesson) => lesson.teacherId === id).flatMap((lesson) => lesson.participants.map(({ studentId }) => studentId)))
-    ids.forEach((studentId) => assigned.add(studentId))
-    return { id, name: teacherNames[index], members: students.filter((student) => ids.has(student.id)) }
-  })
-  const unassigned = students.filter((student) => !assigned.has(student.id))
-  const endDrag = () => { setDragged(null); setTarget(null) }
+  const rosterIds = new Map(TEACHERS.map(({ id }) => [id, new Set<string>()]))
+  const scheduledIds = new Set<string>()
+  for (const lesson of lessons) {
+    for (const { studentId } of lesson.participants) {
+      rosterIds.get(lesson.teacherId)?.add(studentId)
+      scheduledIds.add(studentId)
+    }
+  }
+  for (const student of students) {
+    if (student.rosterTeacherId && !scheduledIds.has(student.id)) rosterIds.get(student.rosterTeacherId)?.add(student.id)
+  }
+  const rosters = TEACHERS.map(({ id, index }) => ({
+    id, name: teacherNames[index], members: students.filter((student) => rosterIds.get(id)?.has(student.id)),
+  }))
+  const unassigned = students.filter((student) => !scheduledIds.has(student.id) && !student.rosterTeacherId)
+  const endDrag = () => {
+    pointer.current = null
+    setDragged(null)
+    setTarget(null)
+  }
 
   return (
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
-      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 다른 선생님 반으로 끌어 옮기세요.</p></div></header>
+      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 원하는 반으로 끌어 놓으세요.</p></div></header>
       <div className="teacher-roster-rows">
-        {rosters.map(({ id, name, members }) => (
-          <section key={id} data-roster-teacher={id} className={`grade-group teacher-roster-row${target === id ? ' is-drop-target' : ''}`}
-            onDragOver={(event) => {
-              if (!dragged || dragged.from === id) return
-              event.preventDefault()
-              event.dataTransfer.dropEffect = 'move'
-              setTarget(id)
-            }}
-            onDragLeave={(event) => {
-              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setTarget((current) => current === id ? null : current)
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              if (dragged && dragged.from !== id) onMove(dragged.studentId, dragged.from, id)
-              endDrag()
-            }}>
-            <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
-            {members.length === 0 && <p>배정된 학생이 없습니다.</p>}
-            {members.length > 0 && <div className="roster-grade-groups">
-              {groupStudentsByGrade(members).map(({ label, students: classmates }) => (
-                <ul key={label} aria-label={label}>
-                  {classmates.map((student) => (
-                    <li key={student.id}>
-                      <button type="button" className={`student-quick-button${dragged?.studentId === student.id && dragged.from === id ? ' is-dragging' : ''}`}
-                        draggable onDragStart={(event) => {
-                          event.dataTransfer.setData('text/plain', student.id)
-                          event.dataTransfer.effectAllowed = 'move'
-                          setDragged({ studentId: student.id, from: id })
-                        }} onDragEnd={endDrag}
-                        onPointerDown={(event) => {
-                          suppressClick.current = false
-                          if (event.pointerType !== 'touch' || !event.isPrimary) return
-                          touchDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
-                          event.currentTarget.setPointerCapture(event.pointerId)
-                        }}
-                        onPointerMove={(event) => {
-                          const touch = touchDrag.current
-                          if (!touch || touch.pointerId !== event.pointerId) return
-                          if (!touch.moved && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 8) return
-                          if (!touch.moved) {
-                            touch.moved = true
-                            setDragged({ studentId: student.id, from: id })
-                          }
-                          const destination = teacherAtPoint(event.clientX, event.clientY)
-                          setTarget(destination === id ? null : destination)
-                        }}
-                        onPointerUp={(event) => {
-                          const touch = touchDrag.current
-                          if (!touch || touch.pointerId !== event.pointerId) return
-                          touchDrag.current = null
-                          if (!touch.moved) return
-                          suppressClick.current = true
-                          const destination = teacherAtPoint(event.clientX, event.clientY)
-                          endDrag()
-                          if (destination && destination !== id) onMove(student.id, id, destination)
-                        }}
-                        onPointerCancel={() => { touchDrag.current = null; endDrag() }}
-                        onClick={(event) => {
-                          if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
-                          suppressClick.current = false
-                        }}><span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span></button>
-                    </li>
+        {[...rosters, { id: null, name: '미배정', members: unassigned }].map(({ id, name, members }) => (
+          (id !== null || members.length > 0) && (
+            <section key={id ?? 'unassigned'} data-roster-teacher={id ?? undefined}
+              className={`grade-group teacher-roster-row${target !== null && target === id ? ' is-drop-target' : ''}`}>
+              <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
+              {members.length === 0 ? <p>배정된 학생이 없습니다.</p> : (
+                <div className="roster-grade-groups">
+                  {groupStudentsByGrade(members).map(({ label, students: classmates }) => (
+                    <ul key={label} aria-label={label}>
+                      {classmates.map((student) => {
+                        const dragKey = `${id ?? 'unassigned'}:${student.id}`
+                        return (
+                          <li key={student.id}>
+                            <button type="button" className={`student-quick-button roster-student${dragged === dragKey ? ' is-dragging' : ''}`}
+                              onPointerDown={(event) => {
+                                if (!event.isPrimary || event.button !== 0) return
+                                suppressClick.current = false
+                                pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+                                event.currentTarget.setPointerCapture(event.pointerId)
+                              }}
+                              onPointerMove={(event) => {
+                                const active = pointer.current
+                                if (!active || active.id !== event.pointerId) return
+                                if (!active.moved && Math.hypot(event.clientX - active.x, event.clientY - active.y) < 6) return
+                                active.moved = true
+                                setDragged(dragKey)
+                                const destination = teacherAtPoint(event.clientX, event.clientY)
+                                setTarget(destination === id ? null : destination)
+                              }}
+                              onPointerUp={(event) => {
+                                const active = pointer.current
+                                if (!active || active.id !== event.pointerId) return
+                                const destination = active.moved ? teacherAtPoint(event.clientX, event.clientY) : null
+                                suppressClick.current = active.moved
+                                endDrag()
+                                if (destination && destination !== id) onMove(student.id, id, destination)
+                              }}
+                              onPointerCancel={endDrag}
+                              onLostPointerCapture={endDrag}
+                              onClick={(event) => {
+                                if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
+                                suppressClick.current = false
+                              }}>
+                              <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
                   ))}
-                </ul>
-              ))}
-            </div>}
-          </section>
+                </div>
+              )}
+            </section>
+          )
         ))}
-        {unassigned.length > 0 && (
-          <section className="grade-group teacher-roster-row">
-            <header className="grade-group-head"><h3>미배정<span>{unassigned.length}명</span></h3></header>
-            <div className="roster-grade-groups">
-              {groupStudentsByGrade(unassigned).map(({ label, students: classmates }) => (
-                <ul key={label} aria-label={label}>
-                  {classmates.map((student) => (
-                    <li key={student.id}>
-                      <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
-                        <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
+      {dragged && (
+        <div className="roster-drop-tray" aria-hidden="true">
+          {rosters.map(({ id, name }) => (
+            <div key={id} data-roster-teacher={id} className={target === id ? 'is-drop-target' : undefined}>{name}</div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -1253,6 +1241,7 @@ function StudentModal({
       grade: grade.trim(),
       subjects,
       familyId: student?.familyId,
+      rosterTeacherId: student?.rosterTeacherId,
       registrationDate,
       enrollmentStatus,
       guardianName: guardianName.trim(),
@@ -4119,9 +4108,20 @@ export default function App() {
   const teacherLessons = useMemo(() => (
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
-  const highlightedStudentIds = useMemo(() => new Set(
-    appState.lessons.filter((lesson) => highlightedTeachers.has(lesson.teacherId)).flatMap((lesson) => lesson.participants.map((participant) => participant.studentId)),
-  ), [appState.lessons, highlightedTeachers])
+  const highlightedStudentIds = useMemo(() => {
+    const scheduledIds = new Set<string>()
+    const highlightedIds = new Set<string>()
+    for (const lesson of appState.lessons) {
+      for (const { studentId } of lesson.participants) {
+        scheduledIds.add(studentId)
+        if (highlightedTeachers.has(lesson.teacherId)) highlightedIds.add(studentId)
+      }
+    }
+    for (const student of appState.students) {
+      if (student.rosterTeacherId && !scheduledIds.has(student.id) && highlightedTeachers.has(student.rosterTeacherId)) highlightedIds.add(student.id)
+    }
+    return highlightedIds
+  }, [appState.lessons, appState.students, highlightedTeachers])
   const groupSeries = useMemo(() => groupLessonsBySeries(teacherLessons), [teacherLessons])
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
@@ -4341,18 +4341,16 @@ export default function App() {
     setNotice(`${backup.label}을(를) 불러왔습니다.`)
   }
 
-  const moveStudent = (studentId: string, from: TeacherId, to: TeacherId) => {
+  const moveStudent = (studentId: string, from: TeacherId | null, to: TeacherId) => {
     const transferId = createId('lesson')
     const result = moveStudentToTeacher(appState.lessons, appState.students, studentId, from, to, transferId)
     if ('error' in result) { setNotice(result.error); return }
     const student = studentById(appState.students, studentId)
     const teacher = TEACHERS.find((item) => item.id === to)!
     const destination = scheduleSettings.teacherNames[teacher.index]
-    const hasGroup = appState.lessons.some((lesson) => lesson.teacherId === from && lesson.kind === 'group' && lesson.participants.some((member) => member.studentId === studentId))
-    if (hasGroup && !window.confirm(`${student?.name} 학생을 ${destination} 반으로 옮길까요? 기존 그룹에서 이 학생만 빠지고, 새 선생님에게 같은 시간의 개인 수업이 만들어집니다.`)) return
     setAppState((current) => {
       const updated = current === appState ? result : moveStudentToTeacher(current.lessons, current.students, studentId, from, to, transferId)
-      return 'lessons' in updated ? { ...current, lessons: updated.lessons } : current
+      return 'lessons' in updated ? { ...current, lessons: updated.lessons, students: updated.students } : current
     })
     clearLessonMoveHistory()
     setNotice(`${student?.name} 학생을 ${destination} 반으로 옮겼습니다.`)

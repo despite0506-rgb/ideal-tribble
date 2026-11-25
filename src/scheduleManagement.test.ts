@@ -5,6 +5,19 @@ import { appendAutomaticBackup, lessonsFromBackup, moveStudentToTeacher } from '
 import type { ScheduleBackup } from './types'
 
 describe('student transfers', () => {
+  it('assigns and moves a student with no scheduled lessons', () => {
+    const studentId = 'student-harin'
+    const lessons = DEMO_STATE.lessons.filter((lesson) => lesson.participants.every((member) => member.studentId !== studentId))
+    const assigned = moveStudentToTeacher(lessons, DEMO_STATE.students, studentId, null, 'teacher-2', 'assignment')
+    if (!('lessons' in assigned)) throw new Error(assigned.error)
+    expect(assigned.lessons).toBe(lessons)
+    expect(assigned.students.find(({ id }) => id === studentId)?.rosterTeacherId).toBe('teacher-2')
+    const moved = moveStudentToTeacher(assigned.lessons, assigned.students, studentId, 'teacher-2', 'teacher-3', 'transfer')
+    if (!('lessons' in moved)) throw new Error(moved.error)
+    expect(moved.students.find(({ id }) => id === studentId)?.rosterTeacherId).toBe('teacher-3')
+    expect(validateState(JSON.parse(JSON.stringify({ ...DEMO_STATE, ...moved })))).toBe(true)
+  })
+
   it('moves only the selected student and keeps valid two-person group remnants', () => {
     const { students, lessons } = DEMO_STATE
     const result = moveStudentToTeacher(lessons, students, 'student-harin', 'teacher-1', 'teacher-2', 'transfer')
