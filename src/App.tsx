@@ -32,6 +32,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Save,
   Search,
   Settings2,
   Trash2,
@@ -87,7 +88,8 @@ import {
   validateLesson,
 } from './domain'
 import { loadLocalLabDrafts, loadScheduleSettings, loadState, resetState, saveLocalLabDrafts, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeeklyMemo, WeeklyTodo, WeekendMode } from './types'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleBackup, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeeklyMemo, WeeklyTodo, WeekendMode } from './types'
+import { appendAutomaticBackup, lessonsFromBackup, moveStudentToTeacher } from './scheduleManagement'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 import { applyWeeklyNotesEdits, fillFromPreviousWeek, todosForWeek, weeklyNotes, type WeeklyNotes } from './weeklyRecords'
 
@@ -694,6 +696,108 @@ function StudentQuickLinks({
         ))}
       </div>
     </section>
+  )
+}
+
+function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onMove }: {
+  students: Student[]
+  lessons: Lesson[]
+  teacherNames: ScheduleSettings['teacherNames']
+  onOpenStudent: (id: string) => void
+  onMove: (studentId: string, from: TeacherId, to: TeacherId) => void
+}) {
+  const [dragged, setDragged] = useState<{ studentId: string; from: TeacherId } | null>(null)
+  const [target, setTarget] = useState<TeacherId | null>(null)
+  const assigned = new Set<string>()
+  const columns = TEACHERS.map(({ id, index }) => {
+    const ids = new Set(lessons.filter((lesson) => lesson.teacherId === id).flatMap((lesson) => lesson.participants.map(({ studentId }) => studentId)))
+    ids.forEach((studentId) => assigned.add(studentId))
+    return { id, name: teacherNames[index], members: students.filter((student) => ids.has(student.id)) }
+  })
+  const unassigned = students.filter((student) => !assigned.has(student.id))
+  const endDrag = () => { setDragged(null); setTarget(null) }
+
+  return (
+    <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
+      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 다른 선생님 반으로 끌거나 이동할 반을 선택하세요.</p></div></header>
+      <div className="teacher-roster-grid">
+        {columns.map(({ id, name, members }) => (
+          <section key={id} className={`grade-group teacher-roster-column${target === id ? ' is-drop-target' : ''}`}
+            onDragOver={(event) => {
+              if (!dragged || dragged.from === id) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+              setTarget(id)
+            }}
+            onDragLeave={(event) => {
+              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setTarget((current) => current === id ? null : current)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              if (dragged && dragged.from !== id) onMove(dragged.studentId, dragged.from, id)
+              endDrag()
+            }}>
+            <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
+            {members.length === 0 && <p>배정된 학생이 없습니다.</p>}
+            <ul>
+              {members.map((student) => (
+                <li key={student.id}>
+                  <button type="button" className="student-quick-button is-assigned" style={{ '--student-color': student.color } as CSSProperties}
+                    draggable onDragStart={(event) => {
+                      event.dataTransfer.setData('text/plain', student.id)
+                      event.dataTransfer.effectAllowed = 'move'
+                      setDragged({ studentId: student.id, from: id })
+                    }} onDragEnd={endDrag} onClick={() => onOpenStudent(student.id)}>{student.name}</button>
+                  <select aria-label={`${student.name} 학생의 ${name} 반 이동`} value="" onChange={(event) => onMove(student.id, id, event.target.value as TeacherId)}>
+                    <option value="" disabled>반 이동</option>
+                    {columns.filter((column) => column.id !== id).map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
+                  </select>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+        {unassigned.length > 0 && (
+          <section className="grade-group">
+            <header className="grade-group-head"><h3>미배정<span>{unassigned.length}명</span></h3></header>
+            <div>{unassigned.map((student) => <button type="button" className="student-quick-button is-unassigned" key={student.id} onClick={() => onOpenStudent(student.id)}>{student.name}</button>)}</div>
+          </section>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TermScheduleModal({ backups, lessonCount, onSave, onRestore, onClose }: {
+  backups: ScheduleBackup[]
+  lessonCount: number
+  onSave: (label: string) => void
+  onRestore: (backup: ScheduleBackup) => void
+  onClose: () => void
+}) {
+  const [label, setLabel] = useState('')
+  return (
+    <ModalFrame title="학기 시간표 보관" eyebrow="주간 시간표" onClose={onClose}>
+      <div className="modal-body term-schedules">
+        <form onSubmit={(event) => { event.preventDefault(); onSave(label.trim() || '학기 시간표'); setLabel('') }}>
+          <p>현재 모든 선생님의 주간 수업 {lessonCount}개를 저장합니다.</p>
+          <label>저장 이름<input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 2학기 정규 시간표" maxLength={80} /></label>
+          <button type="submit" className="button primary"><Save size={15} /> 현재 시간표 저장</button>
+        </form>
+        <section aria-label="저장된 학기 시간표">
+          <h3>저장된 시간표</h3>
+          {backups.length === 0 && <p>저장된 학기 시간표가 없습니다.</p>}
+          <ul>
+            {backups.map((backup) => (
+              <li key={backup.id}>
+                <div><strong>{backup.label}</strong><small>{new Date(backup.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · {backup.lessons.length}개 수업</small></div>
+                <button type="button" className="button secondary" aria-label={`${backup.label} 불러오기`} onClick={() => onRestore(backup)}><RotateCcw size={14} /> 불러오기</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    </ModalFrame>
   )
 }
 
@@ -3390,7 +3494,7 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
     const key = (event: KeyboardEvent) => { if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return; const target = event.target; if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return; if (!undoRef.current.length) return; event.preventDefault(); undo() }
     document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key)
   })
-  if (!draft) return <section className="lab-empty-page"><span><Beaker size={38} /></span><h2>시간표 실험실</h2><p>실제 시간표에 영향을 주지 않고 여러 조합을 만들어 비교할 수 있습니다.</p><button type="button" className="button primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> 첫 시안 만들기</button>{createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}</section>
+  if (!draft) return <section className="lab-empty-page"><span><Beaker size={38} /></span><h2>시간표 실험실</h2><p>실제 시간표에 영향을 주지 않고 여러 조합을 만들어 비교할 수 있습니다.</p><button type="button" className="button primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> 첫 시안 만들기</button>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}{createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}</section>
   const editLesson = draft.lessons.find((lesson) => lesson.id === lessonEditor?.lessonId)
   return <section className="schedule-lab-page">
     <header className="lab-page-header"><div><span className="lab-watermark"><Beaker size={17} /> 연습용 시간표</span><h2>시간표 실험실</h2><p>여기서 변경해도 실제 수업·출석·결제에는 영향을 주지 않습니다.</p></div><div>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}<button type="button" className="button secondary" onClick={() => setCreateOpen(true)}><Plus size={15} /> 새 시안</button><button type="button" className="button primary" onClick={() => setPublishOpen(true)}>실제 시간표로 반영</button></div></header>
@@ -3840,6 +3944,8 @@ export default function App() {
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
+  const [studentGrouping, setStudentGrouping] = useState<'grade' | 'teacher'>('grade')
+  const [termSchedulesOpen, setTermSchedulesOpen] = useState(false)
   const [studentPageQuery, setStudentPageQuery] = useState('')
   const [studentSortMode, setStudentSortMode] = useState<StudentSortMode>('name')
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
@@ -3935,6 +4041,7 @@ export default function App() {
     const normalized = studentPageQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade} ${student.guardianName} ${student.guardianPhone}`.toLocaleLowerCase('ko').includes(normalized)
   })
+  const automaticBackup = appState.scheduleBackups.filter((backup) => backup.kind !== 'term').at(-1)
   const teacherLessons = useMemo(() => (
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
@@ -4112,7 +4219,7 @@ export default function App() {
     const now = new Date().toISOString()
     setAppState((current) => {
       const backup = { id: createId('schedule-backup'), label: `${koreanDateLabel(dateToInputValue(new Date()))} ${koreanTimeLabel(now)} 반영 전`, lessons: structuredClone(current.lessons), createdAt: now }
-      return { ...current, lessons: prospectiveLessons, scheduleBackups: [...current.scheduleBackups.slice(-4), backup] }
+      return { ...current, lessons: prospectiveLessons, scheduleBackups: appendAutomaticBackup(current.scheduleBackups, backup) }
     })
     setView('schedule')
     setNotice(`${draft.name} 시안을 실제 시간표에 반영했습니다. 필요하면 실험실에서 복구할 수 있습니다.`)
@@ -4120,10 +4227,61 @@ export default function App() {
   }
 
   const restoreScheduleBackup = () => {
-    const latest = appState.scheduleBackups.at(-1)
-    if (!latest || !window.confirm(`${latest.label} 시간표로 복구할까요?`)) return
-    setAppState((current) => ({ ...current, lessons: structuredClone(current.scheduleBackups.at(-1)?.lessons ?? current.lessons), scheduleBackups: current.scheduleBackups.slice(0, -1) }))
-    setNotice('실제 시간표를 반영 직전 상태로 복구했습니다.')
+    if (!automaticBackup || !window.confirm(`${automaticBackup.label} 시간표로 복구할까요?`)) return
+    setAppState((current) => ({
+      ...current,
+      lessons: lessonsFromBackup(automaticBackup, current.students),
+      scheduleBackups: current.scheduleBackups.filter((backup) => backup.id !== automaticBackup.id),
+    }))
+    clearLessonMoveHistory()
+    setNotice('실제 시간표를 자동 백업에서 복구했습니다.')
+  }
+
+  const clearLessonMoveHistory = () => {
+    lessonMoveHistoryRef.current = []
+    setCanUndoLessonMove(false)
+    setCopiedLessonId(null)
+  }
+
+  const saveTermSchedule = (label: string) => {
+    const id = createId('schedule-backup')
+    const createdAt = new Date().toISOString()
+    setAppState((current) => ({
+      ...current,
+      scheduleBackups: [...current.scheduleBackups, { id, label, kind: 'term', createdAt, lessons: structuredClone(current.lessons) }],
+    }))
+    setNotice(`${label}을(를) 저장했습니다.`)
+  }
+
+  const restoreTermSchedule = (backup: ScheduleBackup) => {
+    if (!window.confirm(`‘${backup.label}’으로 모든 선생님의 주간 시간표를 바꿀까요? 현재 시간표는 복원 전에 자동 백업하며, 삭제된 학생은 복원할 수업 명단에서 제외합니다.`)) return
+    const id = createId('schedule-backup')
+    const createdAt = new Date().toISOString()
+    setAppState((current) => ({
+      ...current,
+      lessons: lessonsFromBackup(backup, current.students),
+      scheduleBackups: appendAutomaticBackup(current.scheduleBackups, { id, label: `${backup.label} 불러오기 전`, createdAt, lessons: structuredClone(current.lessons) }),
+    }))
+    clearLessonMoveHistory()
+    setTermSchedulesOpen(false)
+    setNotice(`${backup.label}을(를) 불러왔습니다.`)
+  }
+
+  const moveStudent = (studentId: string, from: TeacherId, to: TeacherId) => {
+    const transferId = createId('lesson')
+    const result = moveStudentToTeacher(appState.lessons, appState.students, studentId, from, to, transferId)
+    if ('error' in result) { setNotice(result.error); return }
+    const student = studentById(appState.students, studentId)
+    const teacher = TEACHERS.find((item) => item.id === to)!
+    const destination = scheduleSettings.teacherNames[teacher.index]
+    const hasGroup = appState.lessons.some((lesson) => lesson.teacherId === from && lesson.kind === 'group' && lesson.participants.some((member) => member.studentId === studentId))
+    if (hasGroup && !window.confirm(`${student?.name} 학생을 ${destination} 반으로 옮길까요? 기존 그룹에서 이 학생만 빠지고, 새 선생님에게 같은 시간의 개인 수업이 만들어집니다.`)) return
+    setAppState((current) => {
+      const updated = current === appState ? result : moveStudentToTeacher(current.lessons, current.students, studentId, from, to, transferId)
+      return 'lessons' in updated ? { ...current, lessons: updated.lessons } : current
+    })
+    clearLessonMoveHistory()
+    setNotice(`${student?.name} 학생을 ${destination} 반으로 옮겼습니다.`)
   }
 
   const deleteLesson = (lessonId: string) => {
@@ -4684,6 +4842,7 @@ export default function App() {
                   {canUndoLessonMove && <button type="button" className="schedule-settings-button undo-move-button" onClick={undoLessonMove} aria-keyshortcuts="Control+Z Meta+Z" title="마지막 드래그 이동 되돌리기 (Ctrl+Z / ⌘Z)"><RotateCcw size={15} /><span>이동 되돌리기</span></button>}
                   {copiedLessonId && <button type="button" className="schedule-settings-button paste-lesson-button" onClick={() => setLessonModal({ open: true, templateLessonId: copiedLessonId })}><Copy size={15} /><span>붙여넣기</span></button>}
                   <button type="button" className="schedule-settings-button merge-lessons-button" disabled={teacherLessons.length < 2} onClick={() => setMergeLessonsOpen(true)} title={teacherLessons.length < 2 ? '합칠 수업이 2개 이상 필요합니다.' : '여러 수업의 학생을 합쳐 새 시간으로 설정'}><GitMerge size={15} /><span>수업 합치기</span></button>
+                  <button type="button" className="schedule-settings-button" aria-label="학기 시간표 보관" title="학기 시간표 보관" onClick={() => setTermSchedulesOpen(true)}><Save size={15} /><span>학기 시간표 보관</span></button>
                   <button type="button" className="schedule-settings-button" onClick={() => printPageMode('print-schedule')}><Download size={15} /><span>인쇄</span></button>
                   <button
                     type="button"
@@ -4846,7 +5005,7 @@ export default function App() {
             settings={scheduleSettings}
             teacherNames={scheduleSettings.teacherNames}
             activeTeacherId={activeTeacherId}
-            backupLabel={appState.scheduleBackups.at(-1)?.label}
+            backupLabel={automaticBackup?.label}
             onCreate={createLabDraft}
             onSaveDraft={saveLabDraft}
             onDeleteDraft={deleteLabDraft}
@@ -4892,6 +5051,13 @@ export default function App() {
                 <button type="button" className="button secondary" onClick={() => setSchoolColorModalOpen(true)}><Palette size={15} /> 학교별 색상</button>
               </div>
             </div>
+            <div className="student-group-switch" aria-label="학생 보기 방식">
+              <button type="button" className="button secondary" aria-pressed={studentGrouping === 'grade'} onClick={() => setStudentGrouping('grade')}>학년별 보기</button>
+              <button type="button" className="button secondary" aria-pressed={studentGrouping === 'teacher'} onClick={() => setStudentGrouping('teacher')}>선생님별 보기</button>
+            </div>
+            {studentGrouping === 'grade'
+              ? <StudentQuickLinks students={pageStudents} assignedStudentIds={activeTeacherStudentIds} onOpenStudent={showStudentDetail} />
+              : <StudentsByTeacher students={pageStudents} lessons={appState.lessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
             ) : (
@@ -4958,6 +5124,14 @@ export default function App() {
         <button type="button" className={view === 'payments' ? 'active' : ''} onClick={() => setView('payments')}><CreditCard size={20} /><span>결제</span></button>
         <button type="button" className={view === 'students' || view === 'student' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
       </nav>
+
+      {termSchedulesOpen && <TermScheduleModal
+        backups={appState.scheduleBackups.filter((backup) => backup.kind === 'term').sort((a, b) => b.createdAt.localeCompare(a.createdAt))}
+        lessonCount={appState.lessons.length}
+        onSave={saveTermSchedule}
+        onRestore={restoreTermSchedule}
+        onClose={() => setTermSchedulesOpen(false)}
+      />}
 
       {lessonModal.open && (
         <LessonModal

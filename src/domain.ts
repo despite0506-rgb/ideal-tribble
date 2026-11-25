@@ -683,6 +683,7 @@ export function validateState(value: unknown): value is AppState {
     const backupIds = new Set<string>()
     for (const backup of state.scheduleBackups) {
       if (!backup || typeof backup !== 'object' || typeof backup.id !== 'string' || backupIds.has(backup.id) || typeof backup.label !== 'string' || !Array.isArray(backup.lessons) || typeof backup.createdAt !== 'string') return false
+      if (backup.kind !== undefined && backup.kind !== 'term') return false
       backupIds.add(backup.id)
       const lessonIds = new Set<string>()
       for (const lesson of backup.lessons) {

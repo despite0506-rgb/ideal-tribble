@@ -176,6 +176,7 @@ export type ScheduleDraft = {
 }
 
 export type ScheduleBackup = {
+  kind?: 'term'
   id: string
   label: string
   lessons: Lesson[]
