@@ -621,6 +621,22 @@ function LessonList({
   )
 }
 
+function groupStudentsByGrade(students: Student[]) {
+  const grouped = new Map<string, Student[]>()
+  students.forEach((student) => {
+    const label = getStudentGradeGroup(student)
+    const members = grouped.get(label)
+    if (members) members.push(student)
+    else grouped.set(label, [student])
+  })
+  return [...grouped.entries()]
+    .map(([label, groupStudents]) => ({
+      label,
+      students: groupStudents.sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    }))
+    .sort((a, b) => gradeGroupSortValue(a.label) - gradeGroupSortValue(b.label) || a.label.localeCompare(b.label, 'ko'))
+}
+
 function StudentQuickLinks({
   students,
   assignedStudentIds,
@@ -637,19 +653,7 @@ function StudentQuickLinks({
   onOpenStudent: (studentId: string) => void
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
-  const groups = useMemo(() => {
-    const grouped = new Map<string, Student[]>()
-    students.forEach((student) => {
-      const label = getStudentGradeGroup(student)
-      grouped.set(label, [...(grouped.get(label) ?? []), student])
-    })
-    return [...grouped.entries()]
-      .map(([label, groupStudents]) => ({
-        label,
-        students: groupStudents.sort((a, b) => a.name.localeCompare(b.name, 'ko')),
-      }))
-      .sort((a, b) => gradeGroupSortValue(a.label) - gradeGroupSortValue(b.label) || a.label.localeCompare(b.label, 'ko'))
-  }, [students])
+  const groups = useMemo(() => groupStudentsByGrade(students), [students])
   const toggleGroup = (label: string) => {
     setCollapsedGroups((current) => {
       const next = new Set(current)
@@ -725,7 +729,7 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
     return TEACHERS.find((teacher) => teacher.id === id)?.id ?? null
   }
   const assigned = new Set<string>()
-  const columns = TEACHERS.map(({ id, index }) => {
+  const rosters = TEACHERS.map(({ id, index }) => {
     const ids = new Set(lessons.filter((lesson) => lesson.teacherId === id).flatMap((lesson) => lesson.participants.map(({ studentId }) => studentId)))
     ids.forEach((studentId) => assigned.add(studentId))
     return { id, name: teacherNames[index], members: students.filter((student) => ids.has(student.id)) }
@@ -737,7 +741,7 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
       <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 다른 선생님 반으로 끌어 옮기세요.</p></div></header>
       <div className="teacher-roster-rows">
-        {columns.map(({ id, name, members }) => (
+        {rosters.map(({ id, name, members }) => (
           <section key={id} data-roster-teacher={id} className={`grade-group teacher-roster-row${target === id ? ' is-drop-target' : ''}`}
             onDragOver={(event) => {
               if (!dragged || dragged.from === id) return
@@ -755,59 +759,72 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
             }}>
             <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
             {members.length === 0 && <p>배정된 학생이 없습니다.</p>}
-            <ul>
-              {members.map((student) => (
-                <li key={student.id}>
-                  <button type="button" className={`student-quick-button is-assigned${dragged?.studentId === student.id && dragged.from === id ? ' is-dragging' : ''}`}
-                    style={{ '--student-color': student.color } as CSSProperties}
-                    draggable onDragStart={(event) => {
-                      event.dataTransfer.setData('text/plain', student.id)
-                      event.dataTransfer.effectAllowed = 'move'
-                      setDragged({ studentId: student.id, from: id })
-                    }} onDragEnd={endDrag}
-                    onPointerDown={(event) => {
-                      suppressClick.current = false
-                      if (event.pointerType !== 'touch' || !event.isPrimary) return
-                      touchDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
-                      event.currentTarget.setPointerCapture(event.pointerId)
-                    }}
-                    onPointerMove={(event) => {
-                      const touch = touchDrag.current
-                      if (!touch || touch.pointerId !== event.pointerId) return
-                      if (!touch.moved && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 8) return
-                      if (!touch.moved) {
-                        touch.moved = true
-                        setDragged({ studentId: student.id, from: id })
-                      }
-                      const destination = teacherAtPoint(event.clientX, event.clientY)
-                      setTarget(destination === id ? null : destination)
-                    }}
-                    onPointerUp={(event) => {
-                      const touch = touchDrag.current
-                      if (!touch || touch.pointerId !== event.pointerId) return
-                      touchDrag.current = null
-                      if (!touch.moved) return
-                      suppressClick.current = true
-                      const destination = teacherAtPoint(event.clientX, event.clientY)
-                      endDrag()
-                      if (destination && destination !== id) onMove(student.id, id, destination)
-                    }}
-                    onPointerCancel={() => { touchDrag.current = null; endDrag() }}
-                    onClick={(event) => {
-                      if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
-                      suppressClick.current = false
-                    }}><span className="roster-grade">({getStudentGradeGroup(student)})</span><span>{student.name}</span></button>
-                </li>
+            {members.length > 0 && <div className="roster-grade-groups">
+              {groupStudentsByGrade(members).map(({ label, students: classmates }) => (
+                <ul key={label} aria-label={label}>
+                  {classmates.map((student) => (
+                    <li key={student.id}>
+                      <button type="button" className={`student-quick-button${dragged?.studentId === student.id && dragged.from === id ? ' is-dragging' : ''}`}
+                        draggable onDragStart={(event) => {
+                          event.dataTransfer.setData('text/plain', student.id)
+                          event.dataTransfer.effectAllowed = 'move'
+                          setDragged({ studentId: student.id, from: id })
+                        }} onDragEnd={endDrag}
+                        onPointerDown={(event) => {
+                          suppressClick.current = false
+                          if (event.pointerType !== 'touch' || !event.isPrimary) return
+                          touchDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+                          event.currentTarget.setPointerCapture(event.pointerId)
+                        }}
+                        onPointerMove={(event) => {
+                          const touch = touchDrag.current
+                          if (!touch || touch.pointerId !== event.pointerId) return
+                          if (!touch.moved && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 8) return
+                          if (!touch.moved) {
+                            touch.moved = true
+                            setDragged({ studentId: student.id, from: id })
+                          }
+                          const destination = teacherAtPoint(event.clientX, event.clientY)
+                          setTarget(destination === id ? null : destination)
+                        }}
+                        onPointerUp={(event) => {
+                          const touch = touchDrag.current
+                          if (!touch || touch.pointerId !== event.pointerId) return
+                          touchDrag.current = null
+                          if (!touch.moved) return
+                          suppressClick.current = true
+                          const destination = teacherAtPoint(event.clientX, event.clientY)
+                          endDrag()
+                          if (destination && destination !== id) onMove(student.id, id, destination)
+                        }}
+                        onPointerCancel={() => { touchDrag.current = null; endDrag() }}
+                        onClick={(event) => {
+                          if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
+                          suppressClick.current = false
+                        }}><span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span></button>
+                    </li>
+                  ))}
+                </ul>
               ))}
-            </ul>
+            </div>}
           </section>
         ))}
         {unassigned.length > 0 && (
           <section className="grade-group teacher-roster-row">
             <header className="grade-group-head"><h3>미배정<span>{unassigned.length}명</span></h3></header>
-            <ul>{unassigned.map((student) => (
-              <li key={student.id}><button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}><span className="roster-grade">({getStudentGradeGroup(student)})</span><span>{student.name}</span></button></li>
-            ))}</ul>
+            <div className="roster-grade-groups">
+              {groupStudentsByGrade(unassigned).map(({ label, students: classmates }) => (
+                <ul key={label} aria-label={label}>
+                  {classmates.map((student) => (
+                    <li key={student.id}>
+                      <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
+                        <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
           </section>
         )}
       </div>

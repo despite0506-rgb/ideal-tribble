@@ -5041,6 +5041,12 @@ button.selected-student-chip {
   outline: 1px solid var(--brand);
 }
 
+.teacher-roster .roster-grade-groups {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
 .teacher-roster ul {
   display: flex;
   flex-wrap: wrap;
@@ -5062,14 +5068,28 @@ button.selected-student-chip {
   text-shadow: none;
 }
 
-.teacher-roster .student-quick-button.is-assigned {
-  border-inline-start: 3px solid var(--student-color);
-}
-
 .teacher-roster .roster-grade {
-  color: var(--text-muted);
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: #435267;
+  background: #eef1f5;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.teacher-roster .roster-grade[data-grade^="초"] {
+  color: #8c294e;
+  background: #fce6ef;
+}
+
+.teacher-roster .roster-grade[data-grade^="중"] {
+  color: #1f5483;
+  background: #e3f1ff;
+}
+
+.teacher-roster .roster-grade[data-grade^="고"] {
+  color: #735305;
+  background: #fff0c5;
 }
 
 .teacher-roster [draggable="true"] {
