@@ -1,5 +1,5 @@
 import { DEMO_STATE } from './demoData'
-import { validateState } from './domain'
+import { getRosterTeachers, validateState } from './domain'
 import type { AppState, ScheduleDraft, ScheduleSettings, TeacherId } from './types'
 
 export const STORAGE_KEY = 'ideal-tribble:timetable:v1'
@@ -25,6 +25,8 @@ export const normalizeState = (state: AppState): AppState => ({
   ...state,
   students: state.students.map((student) => ({
     ...student,
+    rosterTeacherId: undefined,
+    rosterTeachers: getRosterTeachers(student),
     subjects: Array.isArray(student.subjects) ? student.subjects.filter((subject) => subject === 'math' || subject === 'korean') : [],
     familyId: typeof student.familyId === 'string' && student.familyId ? student.familyId : undefined,
     registrationDate: typeof student.registrationDate === 'string' ? student.registrationDate : typeof student.createdAt === 'string' ? student.createdAt.slice(0, 10) : '',

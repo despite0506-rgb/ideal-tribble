@@ -72,6 +72,7 @@ import {
   getLessonColor,
   getStudentSubjects,
   getStudentGradeGroup,
+  getRosterTeachers,
   getTuitionBreakdown,
   gradeGroupSortValue,
   getScheduleColumns,
@@ -737,12 +738,15 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
     }
   }
   for (const student of students) {
-    if (student.rosterTeacherId) rosterIds.get(student.rosterTeacherId)?.add(student.id)
+    const assigned = getRosterTeachers(student)
+    for (const [teacherId, ids] of rosterIds) {
+      if (assigned[teacherId]) ids.add(student.id)
+    }
   }
   const rosters = TEACHERS.map(({ id, index }) => ({
     id, name: teacherNames[index], members: students.filter((student) => rosterIds.get(id)?.has(student.id)),
   }))
-  const unassigned = students.filter((student) => !scheduledIds.has(student.id) && !student.rosterTeacherId)
+  const unassigned = students.filter((student) => !scheduledIds.has(student.id) && !Object.values(getRosterTeachers(student)).some(Boolean))
   const endDrag = () => {
     pointer.current = null
     setDragged(null)
@@ -1239,7 +1243,7 @@ function StudentModal({
       grade: grade.trim(),
       subjects,
       familyId: student?.familyId,
-      rosterTeacherId: student?.rosterTeacherId,
+      rosterTeachers: student ? getRosterTeachers(student) : {},
       registrationDate,
       enrollmentStatus,
       guardianName: guardianName.trim(),
@@ -3707,7 +3711,7 @@ function StudentDetail({
   transportEnabled: boolean
   onBack: () => void
   onEdit: () => void
-  onSaveTeacher: (teacherId?: TeacherId) => void
+  onSaveTeacher: (teacherId: TeacherId, assigned: boolean) => void
   onAddLesson: () => void
   onOpenLesson: (lessonId: string) => void
   onAddFeedback: (feedback: FeedbackEntry) => void
@@ -3722,6 +3726,7 @@ function StudentDetail({
   const [feedbackContent, setFeedbackContent] = useState('')
   const [familyModalOpen, setFamilyModalOpen] = useState(false)
   const feedbacks = [...student.feedbacks].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+  const rosterTeachers = getRosterTeachers(student)
   const groupLessons = lessons.filter((lesson) => lesson.kind === 'group')
   const familyMembers = student.familyId ? allStudents.filter((item) => item.familyId === student.familyId) : []
 
@@ -3769,16 +3774,16 @@ function StudentDetail({
             <h2>{student.name}</h2>
             <p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p>
             <small className="student-guardian-summary">등록 {student.registrationDate || '미등록'} · 보호자 {student.guardianName || '미등록'} {student.guardianPhone}</small>
-            <label className="student-detail-teacher">
-              담당 선생님
-              <select value={student.rosterTeacherId ?? ''} onChange={(event) => {
-                const teacher = TEACHERS.find(({ id }) => id === event.target.value)
-                onSaveTeacher(teacher?.id)
-              }}>
-                <option value="">지정 안 함</option>
-                {TEACHERS.map(({ id, index }) => <option key={id} value={id}>{teacherNames[index]}</option>)}
-              </select>
-            </label>
+            <fieldset className="student-detail-teacher">
+              <legend>담당 선생님</legend>
+              {TEACHERS.map(({ id, index }) => (
+                <label key={id}>
+                  <input type="checkbox" checked={rosterTeachers[id] === true}
+                    onChange={(event) => onSaveTeacher(id, event.target.checked)} />
+                  {teacherNames[index]}
+                </label>
+              ))}
+            </fieldset>
           </div>
         </div>
         <div className="student-detail-actions">
@@ -4126,7 +4131,8 @@ export default function App() {
       }
     }
     for (const student of appState.students) {
-      if (student.rosterTeacherId && highlightedTeachers.has(student.rosterTeacherId)) highlightedIds.add(student.id)
+      const assigned = getRosterTeachers(student)
+      if ([...highlightedTeachers].some((teacherId) => assigned[teacherId])) highlightedIds.add(student.id)
     }
     return highlightedIds
   }, [appState.lessons, appState.students, highlightedTeachers])
@@ -4500,19 +4506,25 @@ export default function App() {
     setNotice(memberIds.length > 0 ? '형제·자매를 가족 그룹으로 연결했습니다.' : '가족 연결을 해제했습니다. 기존 결제 기록은 유지됩니다.')
   }
 
-  const saveStudentTeacher = (studentId: string, teacherId?: TeacherId) => {
+  const saveStudentTeacher = (studentId: string, teacherId: TeacherId, assigned: boolean) => {
     setAppState((current) => ({
       ...current,
-      students: current.students.map((student) => student.id === studentId ? { ...student, rosterTeacherId: teacherId } : student),
+      students: current.students.map((student) => {
+        if (student.id !== studentId) return student
+        const rosterTeachers = { ...getRosterTeachers(student) }
+        if (assigned) rosterTeachers[teacherId] = true
+        else delete rosterTeachers[teacherId]
+        return { ...student, rosterTeacherId: undefined, rosterTeachers }
+      }),
     }))
-    setNotice(teacherId ? '담당 선생님을 저장했습니다.' : '담당 선생님 지정을 해제했습니다.')
+    setNotice(assigned ? '담당 선생님을 추가했습니다.' : '담당 선생님 지정을 해제했습니다.')
   }
 
   const saveStudent = (student: Student) => {
     setAppState((current) => ({
       ...current,
       students: current.students.some((item) => item.id === student.id)
-        ? current.students.map((item) => item.id === student.id ? student : item)
+        ? current.students.map((item) => item.id === student.id ? { ...student, rosterTeachers: getRosterTeachers(item) } : item)
         : [...current.students, student],
     }))
     setStudentModal({ open: false })
@@ -5193,7 +5205,7 @@ export default function App() {
             transportEnabled={scheduleSettings.transportEnabled}
             onBack={() => setView('students')}
             onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
-            onSaveTeacher={(teacherId) => saveStudentTeacher(detailStudent.id, teacherId)}
+            onSaveTeacher={(teacherId, assigned) => saveStudentTeacher(detailStudent.id, teacherId, assigned)}
             onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
             onOpenLesson={setAttendanceModalLessonId}
             onAddFeedback={(feedback) => addFeedback(detailStudent.id, feedback)}

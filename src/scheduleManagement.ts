@@ -1,3 +1,4 @@
+import { getRosterTeachers } from './domain'
 import type { Lesson, ScheduleBackup, Student, TeacherId } from './types'
 
 function withParticipants(lesson: Lesson, participants: Lesson['participants']): Lesson {
@@ -19,10 +20,17 @@ export function moveStudentToTeacher(
   if (!student || from === to) return { error: '학생을 옮길 반을 확인해 주세요.' }
   const studentLessons = lessons.filter((lesson) => lesson.participants.some((member) => member.studentId === studentId))
   const source = studentLessons.filter((lesson) => lesson.teacherId === from)
-  const movesAssignment = (student.rosterTeacherId ?? null) === from && (from !== null || studentLessons.length === 0)
+  const rosterTeachers = { ...getRosterTeachers(student) }
+  const movesAssignment = from === null
+    ? studentLessons.length === 0 && !Object.values(rosterTeachers).some(Boolean)
+    : rosterTeachers[from] === true
   if (source.length === 0 && !movesAssignment) return { error: '현재 반 배정이 변경되었습니다. 명단을 확인해 주세요.' }
+  if (movesAssignment) {
+    if (from !== null) delete rosterTeachers[from]
+    rosterTeachers[to] = true
+  }
   const updatedStudents = movesAssignment
-    ? students.map((item) => item.id === studentId ? { ...item, rosterTeacherId: to } : item)
+    ? students.map((item) => item.id === studentId ? { ...item, rosterTeacherId: undefined, rosterTeachers } : item)
     : students
   if (source.length === 0) return { lessons, students: updatedStudents }
   const sourceIds = new Set(source.map((lesson) => lesson.id))

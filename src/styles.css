@@ -2642,27 +2642,50 @@ body.sidebar-resizing {
   box-shadow: var(--shadow-sm);
 }
 
-.student-detail-profile,
+.student-detail-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .student-detail-teacher {
   display: flex;
+  min-inline-size: 0;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
 }
 
-.student-detail-teacher select {
-  max-width: 100%;
+.student-detail-teacher legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.student-detail-teacher label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-height: 30px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  background: #fff;
-  font: inherit;
+  cursor: pointer;
+}
+
+.student-detail-teacher label:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.student-detail-teacher input {
+  margin: 0;
+  accent-color: var(--brand);
 }
 
 .student-detail-actions {

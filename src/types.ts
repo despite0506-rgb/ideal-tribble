@@ -31,6 +31,7 @@ export type Student = {
   subjects: StudentSubject[]
   familyId?: string
   rosterTeacherId?: TeacherId
+  rosterTeachers?: Partial<Record<TeacherId, true>>
   registrationDate: string
   enrollmentStatus: EnrollmentStatus
   guardianName: string

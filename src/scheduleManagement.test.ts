@@ -11,11 +11,22 @@ describe('student transfers', () => {
     const assigned = moveStudentToTeacher(lessons, DEMO_STATE.students, studentId, null, 'teacher-2', 'assignment')
     if (!('lessons' in assigned)) throw new Error(assigned.error)
     expect(assigned.lessons).toBe(lessons)
-    expect(assigned.students.find(({ id }) => id === studentId)?.rosterTeacherId).toBe('teacher-2')
+    expect(assigned.students.find(({ id }) => id === studentId)?.rosterTeachers).toEqual({ 'teacher-2': true })
     const moved = moveStudentToTeacher(assigned.lessons, assigned.students, studentId, 'teacher-2', 'teacher-3', 'transfer')
     if (!('lessons' in moved)) throw new Error(moved.error)
-    expect(moved.students.find(({ id }) => id === studentId)?.rosterTeacherId).toBe('teacher-3')
+    expect(moved.students.find(({ id }) => id === studentId)?.rosterTeachers).toEqual({ 'teacher-3': true })
     expect(validateState(JSON.parse(JSON.stringify({ ...DEMO_STATE, ...moved })))).toBe(true)
+  })
+
+  it('moves one of two assignments without duplicating the destination', () => {
+    const studentId = 'student-harin'
+    const students = DEMO_STATE.students.map((student) => student.id === studentId
+      ? { ...student, rosterTeachers: { 'teacher-2': true as const, 'teacher-3': true as const } }
+      : student)
+    const result = moveStudentToTeacher(DEMO_STATE.lessons, students, studentId, 'teacher-2', 'teacher-3', 'transfer')
+    if (!('lessons' in result)) throw new Error(result.error)
+    expect(result.lessons).toBe(DEMO_STATE.lessons)
+    expect(result.students.find(({ id }) => id === studentId)?.rosterTeachers).toEqual({ 'teacher-3': true })
   })
 
   it('moves only the selected student and keeps valid two-person group remnants', () => {
