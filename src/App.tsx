@@ -765,47 +765,51 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
               className={`grade-group teacher-roster-section${target !== null && target === id ? ' is-drop-target' : ''}`}>
               <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
               {members.length === 0 ? <p>배정된 학생이 없습니다.</p> : (
-                <ul className="roster-student-grid" aria-label={`${name} 학생 명단`}>
-                  {groupStudentsByGrade(members).flatMap(({ label, students: classmates }) => classmates.map((student) => {
-                    const dragKey = `${id ?? 'unassigned'}:${student.id}`
-                    return (
-                      <li key={student.id}>
-                        <button type="button" className={`student-quick-button roster-student${dragged === dragKey ? ' is-dragging' : ''}`}
-                          onPointerDown={(event) => {
-                            if (!event.isPrimary || event.button !== 0) return
-                            suppressClick.current = false
-                            pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
-                            event.currentTarget.setPointerCapture(event.pointerId)
-                          }}
-                          onPointerMove={(event) => {
-                            const active = pointer.current
-                            if (!active || active.id !== event.pointerId) return
-                            if (!active.moved && Math.hypot(event.clientX - active.x, event.clientY - active.y) < 6) return
-                            active.moved = true
-                            setDragged(dragKey)
-                            const destination = teacherAtPoint(event.clientX, event.clientY)
-                            setTarget(destination === id ? null : destination)
-                          }}
-                          onPointerUp={(event) => {
-                            const active = pointer.current
-                            if (!active || active.id !== event.pointerId) return
-                            const destination = active.moved ? teacherAtPoint(event.clientX, event.clientY) : null
-                            suppressClick.current = active.moved
-                            endDrag()
-                            if (destination && destination !== id) onMove(student.id, id, destination)
-                          }}
-                          onPointerCancel={endDrag}
-                          onLostPointerCapture={endDrag}
-                          onClick={(event) => {
-                            if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
-                            suppressClick.current = false
-                          }}>
-                          <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
-                        </button>
-                      </li>
-                    )
-                  }))}
-                </ul>
+                <div className="roster-grade-groups" role="group" aria-label={`${name} 학생 명단`}>
+                  {groupStudentsByGrade(members).map(({ label, students: classmates }) => (
+                    <ul key={label} className="roster-student-grid" aria-label={label}>
+                      {classmates.map((student) => {
+                        const dragKey = `${id ?? 'unassigned'}:${student.id}`
+                        return (
+                          <li key={student.id}>
+                            <button type="button" className={`student-quick-button roster-student${dragged === dragKey ? ' is-dragging' : ''}`}
+                              onPointerDown={(event) => {
+                                if (!event.isPrimary || event.button !== 0) return
+                                suppressClick.current = false
+                                pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+                                event.currentTarget.setPointerCapture(event.pointerId)
+                              }}
+                              onPointerMove={(event) => {
+                                const active = pointer.current
+                                if (!active || active.id !== event.pointerId) return
+                                if (!active.moved && Math.hypot(event.clientX - active.x, event.clientY - active.y) < 6) return
+                                active.moved = true
+                                setDragged(dragKey)
+                                const destination = teacherAtPoint(event.clientX, event.clientY)
+                                setTarget(destination === id ? null : destination)
+                              }}
+                              onPointerUp={(event) => {
+                                const active = pointer.current
+                                if (!active || active.id !== event.pointerId) return
+                                const destination = active.moved ? teacherAtPoint(event.clientX, event.clientY) : null
+                                suppressClick.current = active.moved
+                                endDrag()
+                                if (destination && destination !== id) onMove(student.id, id, destination)
+                              }}
+                              onPointerCancel={endDrag}
+                              onLostPointerCapture={endDrag}
+                              onClick={(event) => {
+                                if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
+                                suppressClick.current = false
+                              }}>
+                              <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ))}
+                </div>
               )}
             </section>
           )

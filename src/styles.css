@@ -5099,6 +5099,12 @@ button.selected-student-chip {
   outline: 1px solid var(--brand);
 }
 
+.teacher-roster .roster-grade-groups {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
 .teacher-roster .roster-student-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
