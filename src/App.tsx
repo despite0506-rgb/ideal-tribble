@@ -713,8 +713,6 @@ function StudentQuickLinks({
   )
 }
 
-const STUDENTS_PER_ROSTER_PAGE = 6
-
 function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onMove }: {
   students: Student[]
   lessons: Lesson[]
@@ -722,7 +720,6 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
   onOpenStudent: (id: string) => void
   onMove: (studentId: string, from: TeacherId | null, to: TeacherId) => void
 }) {
-  const [pages, setPages] = useState<Partial<Record<TeacherId | 'unassigned', number>>>({})
   const [dragged, setDragged] = useState<string | null>(null)
   const [target, setTarget] = useState<TeacherId | null>(null)
   const pointer = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
@@ -743,18 +740,9 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
     if (student.rosterTeacherId) rosterIds.get(student.rosterTeacherId)?.add(student.id)
   }
   const rosters = TEACHERS.map(({ id, index }) => ({
-    id, name: teacherNames[index], members: groupStudentsByGrade(students.filter((student) => rosterIds.get(id)?.has(student.id))).flatMap((group) => group.students),
+    id, name: teacherNames[index], members: students.filter((student) => rosterIds.get(id)?.has(student.id)),
   }))
-  const unassigned = groupStudentsByGrade(students.filter((student) => !scheduledIds.has(student.id) && !student.rosterTeacherId)).flatMap((group) => group.students)
-  const dropStudent = (student: Student, from: TeacherId | null, to: TeacherId) => {
-    const destination = rosters.find((roster) => roster.id === to)
-    if (!destination) return
-    const members = destination.members.some(({ id }) => id === student.id) ? destination.members : [...destination.members, student]
-    const sorted = groupStudentsByGrade(members).flatMap((group) => group.students)
-    const index = sorted.findIndex(({ id }) => id === student.id)
-    setPages((current) => ({ ...current, [to]: Math.floor(index / STUDENTS_PER_ROSTER_PAGE) }))
-    onMove(student.id, from, to)
-  }
+  const unassigned = students.filter((student) => !scheduledIds.has(student.id) && !student.rosterTeacherId)
   const endDrag = () => {
     pointer.current = null
     setDragged(null)
@@ -764,72 +752,56 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
   return (
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
       <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 원하는 반으로 끌어 놓으세요.</p></div></header>
-      <div className="teacher-roster-columns">
+      <div className="teacher-roster-sections">
         {[...rosters, { id: null, name: '미배정', members: unassigned }].map(({ id, name, members }) => {
           if (id === null && members.length === 0) return null
           const key = id ?? 'unassigned'
-          const pageCount = Math.max(1, Math.ceil(members.length / STUDENTS_PER_ROSTER_PAGE))
-          const page = Math.min(pages[key] ?? 0, pageCount - 1)
-          const start = page * STUDENTS_PER_ROSTER_PAGE
-          const visibleMembers = members.slice(start, start + STUDENTS_PER_ROSTER_PAGE)
-          const changePage = (next: number) => setPages((current) => ({ ...current, [key]: next }))
           return (
             <section key={key} data-roster-teacher={id ?? undefined}
-              className={`grade-group teacher-roster-column${target !== null && target === id ? ' is-drop-target' : ''}`}>
+              className={`grade-group teacher-roster-section${target !== null && target === id ? ' is-drop-target' : ''}`}>
               <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
               {members.length === 0 ? <p>배정된 학생이 없습니다.</p> : (
-                <div className="roster-grade-groups" role="region" aria-label={`${name} 학생 명단`}>
-                  {groupStudentsByGrade(visibleMembers).map(({ label, students: classmates }) => (
-                    <ul key={label} aria-label={label}>
-                      {classmates.map((student) => {
-                        const dragKey = `${id ?? 'unassigned'}:${student.id}`
-                        return (
-                          <li key={student.id}>
-                            <button type="button" className={`student-quick-button roster-student${dragged === dragKey ? ' is-dragging' : ''}`}
-                              onPointerDown={(event) => {
-                                if (!event.isPrimary || event.button !== 0) return
-                                suppressClick.current = false
-                                pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
-                                event.currentTarget.setPointerCapture(event.pointerId)
-                              }}
-                              onPointerMove={(event) => {
-                                const active = pointer.current
-                                if (!active || active.id !== event.pointerId) return
-                                if (!active.moved && Math.hypot(event.clientX - active.x, event.clientY - active.y) < 6) return
-                                active.moved = true
-                                setDragged(dragKey)
-                                const destination = teacherAtPoint(event.clientX, event.clientY)
-                                setTarget(destination === id ? null : destination)
-                              }}
-                              onPointerUp={(event) => {
-                                const active = pointer.current
-                                if (!active || active.id !== event.pointerId) return
-                                const destination = active.moved ? teacherAtPoint(event.clientX, event.clientY) : null
-                                suppressClick.current = active.moved
-                                endDrag()
-                                if (destination && destination !== id) dropStudent(student, id, destination)
-                              }}
-                              onPointerCancel={endDrag}
-                              onLostPointerCapture={endDrag}
-                              onClick={(event) => {
-                                if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
-                                suppressClick.current = false
-                              }}>
-                              <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ))}
-                </div>
-              )}
-              {pageCount > 1 && (
-                <div className="roster-pagination" role="group" aria-label={`${name} 명단 페이지`}>
-                  <button type="button" aria-label={`${name} 이전 페이지`} disabled={page === 0} onClick={() => changePage(page - 1)}><ChevronLeft size={16} /></button>
-                  <span aria-live="polite">{page + 1}/{pageCount}</span>
-                  <button type="button" aria-label={`${name} 다음 페이지`} disabled={page === pageCount - 1} onClick={() => changePage(page + 1)}><ChevronRight size={16} /></button>
-                </div>
+                <ul className="roster-student-grid" aria-label={`${name} 학생 명단`}>
+                  {groupStudentsByGrade(members).flatMap(({ label, students: classmates }) => classmates.map((student) => {
+                    const dragKey = `${id ?? 'unassigned'}:${student.id}`
+                    return (
+                      <li key={student.id}>
+                        <button type="button" className={`student-quick-button roster-student${dragged === dragKey ? ' is-dragging' : ''}`}
+                          onPointerDown={(event) => {
+                            if (!event.isPrimary || event.button !== 0) return
+                            suppressClick.current = false
+                            pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+                            event.currentTarget.setPointerCapture(event.pointerId)
+                          }}
+                          onPointerMove={(event) => {
+                            const active = pointer.current
+                            if (!active || active.id !== event.pointerId) return
+                            if (!active.moved && Math.hypot(event.clientX - active.x, event.clientY - active.y) < 6) return
+                            active.moved = true
+                            setDragged(dragKey)
+                            const destination = teacherAtPoint(event.clientX, event.clientY)
+                            setTarget(destination === id ? null : destination)
+                          }}
+                          onPointerUp={(event) => {
+                            const active = pointer.current
+                            if (!active || active.id !== event.pointerId) return
+                            const destination = active.moved ? teacherAtPoint(event.clientX, event.clientY) : null
+                            suppressClick.current = active.moved
+                            endDrag()
+                            if (destination && destination !== id) onMove(student.id, id, destination)
+                          }}
+                          onPointerCancel={endDrag}
+                          onLostPointerCapture={endDrag}
+                          onClick={(event) => {
+                            if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
+                            suppressClick.current = false
+                          }}>
+                          <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                        </button>
+                      </li>
+                    )
+                  }))}
+                </ul>
               )}
             </section>
           )

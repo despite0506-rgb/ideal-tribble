@@ -5026,22 +5026,17 @@ button.selected-student-chip {
   margin-top: 10px;
 }
 
-.teacher-roster-columns {
+.teacher-roster-sections {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.teacher-roster-column {
+.teacher-roster-section {
   min-width: 0;
   padding: 8px;
 }
 
-.teacher-roster-column:not([data-roster-teacher]) {
-  grid-column: 1 / -1;
-}
-
-.teacher-roster-column .grade-group-head {
+.teacher-roster-section .grade-group-head {
   min-height: 30px;
   margin-bottom: 5px;
 }
@@ -5060,50 +5055,15 @@ button.selected-student-chip {
   font-size: 12px;
 }
 
-.teacher-roster-column.is-drop-target {
+.teacher-roster-section.is-drop-target {
   border-color: var(--brand);
   background: var(--brand-soft);
   outline: 1px solid var(--brand);
 }
 
-.teacher-roster .roster-grade-groups {
+.teacher-roster .roster-student-grid {
   display: grid;
-  align-content: start;
-  gap: 5px;
-  margin: 0;
-  padding: 2px;
-}
-
-.teacher-roster .roster-pagination {
-  justify-content: space-between;
-  align-items: center;
-  gap: 2px;
-  margin-top: 7px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.roster-pagination button {
-  display: grid;
-  width: min(28px, 30%);
-  min-height: 28px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--brand);
-  background: #fff;
-  cursor: pointer;
-}
-
-.roster-pagination button:disabled {
-  opacity: .4;
-  cursor: default;
-}
-
-.teacher-roster ul {
-  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
   margin: 0;
   padding: 0;
@@ -5200,18 +5160,29 @@ button.selected-student-chip {
 }
 
 @media (max-width: 560px) {
-  .teacher-roster-columns {
+  .teacher-roster-sections {
     gap: 4px;
   }
 
-  .teacher-roster-column {
+  .teacher-roster-section {
     padding: 5px;
   }
 
+  .teacher-roster .roster-student-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+
   .teacher-roster .student-quick-button {
+    flex-direction: column;
+    justify-content: center;
     gap: 3px;
     padding-inline: 3px;
     font-size: 11px;
+  }
+
+  .teacher-roster .student-quick-button > span {
+    max-width: 100%;
   }
 
   .teacher-roster .roster-grade {
