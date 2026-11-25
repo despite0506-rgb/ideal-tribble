@@ -752,14 +752,14 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
   return (
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
       <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 원하는 반으로 끌어 놓으세요.</p></div></header>
-      <div className="teacher-roster-rows">
+      <div className="teacher-roster-columns">
         {[...rosters, { id: null, name: '미배정', members: unassigned }].map(({ id, name, members }) => (
           (id !== null || members.length > 0) && (
             <section key={id ?? 'unassigned'} data-roster-teacher={id ?? undefined}
-              className={`grade-group teacher-roster-row${target !== null && target === id ? ' is-drop-target' : ''}`}>
+              className={`grade-group teacher-roster-column${target !== null && target === id ? ' is-drop-target' : ''}`}>
               <header className="grade-group-head"><h3>{name}<span>{members.length}명</span></h3></header>
               {members.length === 0 ? <p>배정된 학생이 없습니다.</p> : (
-                <div className="roster-grade-groups">
+                <div className="roster-grade-groups" role="region" aria-label={`${name} 학생 명단`} tabIndex={members.length > 6 ? 0 : undefined}>
                   {groupStudentsByGrade(members).map(({ label, students: classmates }) => (
                     <ul key={label} aria-label={label}>
                       {classmates.map((student) => {

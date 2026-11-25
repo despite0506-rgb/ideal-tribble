@@ -5026,26 +5026,29 @@ button.selected-student-chip {
   margin-top: 10px;
 }
 
-.teacher-roster-rows {
+.teacher-roster-columns {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.teacher-roster-row {
-  display: grid;
-  grid-template-columns: minmax(75px, 120px) minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-  min-height: 50px;
-  padding: 9px 11px;
+.teacher-roster-column {
+  min-width: 0;
+  padding: 8px;
 }
 
-.teacher-roster-row .grade-group-head {
+.teacher-roster-column:not([data-roster-teacher]) {
+  grid-column: 1 / -1;
+}
+
+.teacher-roster-column .grade-group-head {
   min-height: 30px;
+  margin-bottom: 5px;
 }
 
 .teacher-roster .grade-group h3 {
   flex-wrap: wrap;
+  overflow-wrap: anywhere;
   font-size: 13px;
 }
 
@@ -5057,7 +5060,7 @@ button.selected-student-chip {
   font-size: 12px;
 }
 
-.teacher-roster-row.is-drop-target {
+.teacher-roster-column.is-drop-target {
   border-color: var(--brand);
   background: var(--brand-soft);
   outline: 1px solid var(--brand);
@@ -5065,21 +5068,36 @@ button.selected-student-chip {
 
 .teacher-roster .roster-grade-groups {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  gap: 5px;
+  max-height: 209px;
   margin: 0;
+  padding: 2px 12px 2px 2px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.teacher-roster .roster-grade-groups:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .teacher-roster ul {
   display: grid;
-  justify-items: start;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.teacher-roster li {
+  min-width: 0;
+}
+
 .teacher-roster .student-quick-button {
+  width: 100%;
   min-height: 30px;
+  justify-content: flex-start;
   gap: 5px;
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -5162,13 +5180,27 @@ button.selected-student-chip {
 }
 
 @media (max-width: 560px) {
-  .teacher-roster-row {
-    grid-template-columns: 1fr;
+  .teacher-roster-columns {
     gap: 4px;
   }
 
-  .teacher-roster-row .grade-group-head {
-    min-height: 24px;
+  .teacher-roster-column {
+    padding: 5px;
+  }
+
+  .teacher-roster .roster-grade-groups {
+    padding-inline-end: 9px;
+  }
+
+  .teacher-roster .student-quick-button {
+    gap: 3px;
+    padding-inline: 3px;
+    font-size: 11px;
+  }
+
+  .teacher-roster .roster-grade {
+    padding-inline: 2px;
+    font-size: 9px;
   }
 }
 
