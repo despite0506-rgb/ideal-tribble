@@ -19,16 +19,15 @@ export function moveStudentToTeacher(
   if (!student || from === to) return { error: '학생을 옮길 반을 확인해 주세요.' }
   const studentLessons = lessons.filter((lesson) => lesson.participants.some((member) => member.studentId === studentId))
   const source = studentLessons.filter((lesson) => lesson.teacherId === from)
-  if (studentLessons.length === 0 && (student.rosterTeacherId ?? null) === from) {
-    return {
-      lessons,
-      students: students.map((item) => item.id === studentId ? { ...item, rosterTeacherId: to } : item),
-    }
-  }
-  if (source.length === 0) return { error: '현재 반 배정이 변경되었습니다. 명단을 확인해 주세요.' }
+  const movesAssignment = (student.rosterTeacherId ?? null) === from && (from !== null || studentLessons.length === 0)
+  if (source.length === 0 && !movesAssignment) return { error: '현재 반 배정이 변경되었습니다. 명단을 확인해 주세요.' }
+  const updatedStudents = movesAssignment
+    ? students.map((item) => item.id === studentId ? { ...item, rosterTeacherId: to } : item)
+    : students
+  if (source.length === 0) return { lessons, students: updatedStudents }
   const sourceIds = new Set(source.map((lesson) => lesson.id))
   return {
-    students,
+    students: updatedStudents,
     lessons: lessons.flatMap((lesson) => {
       if (!sourceIds.has(lesson.id)) return [lesson]
       if (lesson.kind === 'individual') return [{ ...lesson, teacherId: to }]

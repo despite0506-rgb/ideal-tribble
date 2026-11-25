@@ -737,7 +737,7 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
     }
   }
   for (const student of students) {
-    if (student.rosterTeacherId && !scheduledIds.has(student.id)) rosterIds.get(student.rosterTeacherId)?.add(student.id)
+    if (student.rosterTeacherId) rosterIds.get(student.rosterTeacherId)?.add(student.id)
   }
   const rosters = TEACHERS.map(({ id, index }) => ({
     id, name: teacherNames[index], members: students.filter((student) => rosterIds.get(id)?.has(student.id)),
@@ -3691,6 +3691,7 @@ function StudentDetail({
   transportEnabled,
   onBack,
   onEdit,
+  onSaveTeacher,
   onAddLesson,
   onOpenLesson,
   onAddFeedback,
@@ -3708,6 +3709,7 @@ function StudentDetail({
   transportEnabled: boolean
   onBack: () => void
   onEdit: () => void
+  onSaveTeacher: (teacherId?: TeacherId) => void
   onAddLesson: () => void
   onOpenLesson: (lessonId: string) => void
   onAddFeedback: (feedback: FeedbackEntry) => void
@@ -3769,6 +3771,16 @@ function StudentDetail({
             <h2>{student.name}</h2>
             <p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p>
             <small className="student-guardian-summary">등록 {student.registrationDate || '미등록'} · 보호자 {student.guardianName || '미등록'} {student.guardianPhone}</small>
+            <label className="student-detail-teacher">
+              담당 선생님
+              <select value={student.rosterTeacherId ?? ''} onChange={(event) => {
+                const teacher = TEACHERS.find(({ id }) => id === event.target.value)
+                onSaveTeacher(teacher?.id)
+              }}>
+                <option value="">지정 안 함</option>
+                {TEACHERS.map(({ id, index }) => <option key={id} value={id}>{teacherNames[index]}</option>)}
+              </select>
+            </label>
           </div>
         </div>
         <div className="student-detail-actions">
@@ -4109,16 +4121,14 @@ export default function App() {
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
   const highlightedStudentIds = useMemo(() => {
-    const scheduledIds = new Set<string>()
     const highlightedIds = new Set<string>()
     for (const lesson of appState.lessons) {
       for (const { studentId } of lesson.participants) {
-        scheduledIds.add(studentId)
         if (highlightedTeachers.has(lesson.teacherId)) highlightedIds.add(studentId)
       }
     }
     for (const student of appState.students) {
-      if (student.rosterTeacherId && !scheduledIds.has(student.id) && highlightedTeachers.has(student.rosterTeacherId)) highlightedIds.add(student.id)
+      if (student.rosterTeacherId && highlightedTeachers.has(student.rosterTeacherId)) highlightedIds.add(student.id)
     }
     return highlightedIds
   }, [appState.lessons, appState.students, highlightedTeachers])
@@ -4490,6 +4500,14 @@ export default function App() {
       }
     })
     setNotice(memberIds.length > 0 ? '형제·자매를 가족 그룹으로 연결했습니다.' : '가족 연결을 해제했습니다. 기존 결제 기록은 유지됩니다.')
+  }
+
+  const saveStudentTeacher = (studentId: string, teacherId?: TeacherId) => {
+    setAppState((current) => ({
+      ...current,
+      students: current.students.map((student) => student.id === studentId ? { ...student, rosterTeacherId: teacherId } : student),
+    }))
+    setNotice(teacherId ? '담당 선생님을 저장했습니다.' : '담당 선생님 지정을 해제했습니다.')
   }
 
   const saveStudent = (student: Student) => {
@@ -5177,6 +5195,7 @@ export default function App() {
             transportEnabled={scheduleSettings.transportEnabled}
             onBack={() => setView('students')}
             onEdit={() => setStudentModal({ open: true, studentId: detailStudent.id })}
+            onSaveTeacher={(teacherId) => saveStudentTeacher(detailStudent.id, teacherId)}
             onAddLesson={() => openNewLesson(undefined, detailStudent.id)}
             onOpenLesson={setAttendanceModalLessonId}
             onAddFeedback={(feedback) => addFeedback(detailStudent.id, feedback)}
