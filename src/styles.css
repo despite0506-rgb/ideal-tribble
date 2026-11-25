@@ -5048,8 +5048,8 @@ button.selected-student-chip {
 }
 
 .teacher-roster ul {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  justify-items: start;
   gap: 6px;
   margin: 0;
   padding: 0;
