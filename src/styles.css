@@ -5026,14 +5026,29 @@ button.selected-student-chip {
   margin-top: 10px;
 }
 
+.teacher-roster {
+  container: teacher-rosters / inline-size;
+}
+
 .teacher-roster-sections {
   display: grid;
   gap: 8px;
 }
 
 .teacher-roster-section {
+  container: teacher-roster-section / inline-size;
   min-width: 0;
   padding: 8px;
+}
+
+@container teacher-rosters (min-width: 920px) {
+  .teacher-roster-sections {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .teacher-roster-section:not([data-roster-teacher]) {
+    grid-column: 1 / -1;
+  }
 }
 
 .teacher-roster-section .grade-group-head {
@@ -5063,11 +5078,17 @@ button.selected-student-chip {
 
 .teacher-roster .roster-student-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@container teacher-roster-section (min-width: 355px) {
+  .teacher-roster .roster-student-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }
 
 .teacher-roster li {
@@ -5095,6 +5116,24 @@ button.selected-student-chip {
   background: #eef1f5;
   font-size: 11px;
   white-space: nowrap;
+}
+
+@container teacher-roster-section (max-width: 570px) {
+  .teacher-roster .student-quick-button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding-inline: 3px;
+  }
+
+  .teacher-roster .student-quick-button > span {
+    max-width: 100%;
+  }
+
+  .teacher-roster .roster-grade {
+    padding-inline: 2px;
+    font-size: 10px;
+  }
 }
 
 .teacher-roster .roster-grade[data-grade^="초"] {
@@ -5174,21 +5213,9 @@ button.selected-student-chip {
   }
 
   .teacher-roster .student-quick-button {
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    padding-inline: 3px;
     font-size: 11px;
   }
 
-  .teacher-roster .student-quick-button > span {
-    max-width: 100%;
-  }
-
-  .teacher-roster .roster-grade {
-    padding-inline: 2px;
-    font-size: 9px;
-  }
 }
 
 .term-schedules ul {
