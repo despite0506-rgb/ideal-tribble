@@ -4793,11 +4793,14 @@ button.selected-student-chip {
   .stat-icon { width: 34px; height: 34px; }
   .stat-card strong { font-size: 18px; }
   .stat-card small { display: none; }
-  .panel-toolbar { min-height: 66px; padding: 11px 13px; }
+  .panel-toolbar { min-height: 66px; flex-wrap: wrap; gap: 8px; padding: 11px 13px; }
+  .toolbar-actions { flex-wrap: wrap; gap: 5px; }
   .panel-toolbar h2 { font-size: 14px; }
   .panel-toolbar p { font-size: 10px; }
   .schedule-settings-button span { display: none; }
   .schedule-settings-button { width: 36px; padding: 0; justify-content: center; }
+  .term-schedule-button { width: auto; padding: 0 7px; }
+  .term-schedule-button span { display: inline; }
   .toolbar-actions > .ride-pills,
   .view-switch { display: none; }
   .desktop-schedule { display: none; }

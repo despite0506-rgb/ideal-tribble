@@ -19,6 +19,7 @@ import {
   ExternalLink,
   GitCompare,
   GitMerge,
+  FolderOpen,
   LayoutDashboard,
   List,
   Link2,
@@ -858,7 +859,8 @@ function KoreanStudentRoster({ students, onOpenStudent }: {
   )
 }
 
-function TermScheduleModal({ backups, lessonCount, onSave, onRestore, onClose }: {
+function TermScheduleModal({ mode, backups, lessonCount, onSave, onRestore, onClose }: {
+  mode: 'save' | 'load'
   backups: ScheduleBackup[]
   lessonCount: number
   onSave: (label: string) => void
@@ -867,14 +869,13 @@ function TermScheduleModal({ backups, lessonCount, onSave, onRestore, onClose }:
 }) {
   const [label, setLabel] = useState('')
   return (
-    <ModalFrame title="학기 시간표 보관" eyebrow="주간 시간표" onClose={onClose}>
+    <ModalFrame title={mode === 'save' ? '학기 시간표 저장' : '학기 시간표 불러오기'} eyebrow="주간 시간표" onClose={onClose}>
       <div className="modal-body term-schedules">
-        <form onSubmit={(event) => { event.preventDefault(); onSave(label.trim() || '학기 시간표'); setLabel('') }}>
+        {mode === 'save' ? <form onSubmit={(event) => { event.preventDefault(); onSave(label.trim() || '학기 시간표') }}>
           <p>현재 모든 선생님의 주간 수업 {lessonCount}개를 저장합니다.</p>
           <label>저장 이름<input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="예: 2학기 정규 시간표" maxLength={80} /></label>
           <button type="submit" className="button primary"><Save size={15} /> 현재 시간표 저장</button>
-        </form>
-        <section aria-label="저장된 학기 시간표">
+        </form> : <section aria-label="저장된 학기 시간표">
           <h3>저장된 시간표</h3>
           {backups.length === 0 && <p>저장된 학기 시간표가 없습니다.</p>}
           <ul>
@@ -885,7 +886,7 @@ function TermScheduleModal({ backups, lessonCount, onSave, onRestore, onClose }:
               </li>
             ))}
           </ul>
-        </section>
+        </section>}
       </div>
     </ModalFrame>
   )
@@ -4059,7 +4060,7 @@ export default function App() {
   const [selectedStudentId, setSelectedStudentId] = useState<Selection>('all')
   const [studentQuery, setStudentQuery] = useState('')
   const [studentGrouping, setStudentGrouping] = useState<'grade' | 'teacher'>('grade')
-  const [termSchedulesOpen, setTermSchedulesOpen] = useState(false)
+  const [termScheduleMode, setTermScheduleMode] = useState<'save' | 'load' | null>(null)
   const [studentPageQuery, setStudentPageQuery] = useState('')
   const [studentSortMode, setStudentSortMode] = useState<StudentSortMode>('name')
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
@@ -4396,6 +4397,7 @@ export default function App() {
       ...current,
       scheduleBackups: [...current.scheduleBackups, { id, label, kind: 'term', createdAt, lessons: structuredClone(current.lessons) }],
     }))
+    setTermScheduleMode(null)
     setNotice(`${label}을(를) 저장했습니다.`)
   }
 
@@ -4409,7 +4411,7 @@ export default function App() {
       scheduleBackups: appendAutomaticBackup(current.scheduleBackups, { id, label: `${backup.label} 불러오기 전`, createdAt, lessons: structuredClone(current.lessons) }),
     }))
     clearLessonMoveHistory()
-    setTermSchedulesOpen(false)
+    setTermScheduleMode(null)
     setNotice(`${backup.label}을(를) 불러왔습니다.`)
   }
 
@@ -5004,7 +5006,8 @@ export default function App() {
                   {canUndoLessonMove && <button type="button" className="schedule-settings-button undo-move-button" onClick={undoLessonMove} aria-keyshortcuts="Control+Z Meta+Z" title="마지막 드래그 이동 되돌리기 (Ctrl+Z / ⌘Z)"><RotateCcw size={15} /><span>이동 되돌리기</span></button>}
                   {copiedLessonId && <button type="button" className="schedule-settings-button paste-lesson-button" onClick={() => setLessonModal({ open: true, templateLessonId: copiedLessonId })}><Copy size={15} /><span>붙여넣기</span></button>}
                   <button type="button" className="schedule-settings-button merge-lessons-button" disabled={teacherLessons.length < 2} onClick={() => setMergeLessonsOpen(true)} title={teacherLessons.length < 2 ? '합칠 수업이 2개 이상 필요합니다.' : '여러 수업의 학생을 합쳐 새 시간으로 설정'}><GitMerge size={15} /><span>수업 합치기</span></button>
-                  <button type="button" className="schedule-settings-button" aria-label="학기 시간표 보관" title="학기 시간표 보관" onClick={() => setTermSchedulesOpen(true)}><Save size={15} /><span>학기 시간표 보관</span></button>
+                  <button type="button" className="schedule-settings-button term-schedule-button" aria-label="학기 시간표 저장" title="학기 시간표 저장" onClick={() => setTermScheduleMode('save')}><Save size={15} /><span>시간표 저장</span></button>
+                  <button type="button" className="schedule-settings-button term-schedule-button" aria-label="학기 시간표 불러오기" title="학기 시간표 불러오기" onClick={() => setTermScheduleMode('load')}><FolderOpen size={15} /><span>시간표 불러오기</span></button>
                   <button type="button" className="schedule-settings-button" onClick={() => printPageMode('print-schedule')}><Download size={15} /><span>인쇄</span></button>
                   <button
                     type="button"
@@ -5296,12 +5299,13 @@ export default function App() {
         <button type="button" className={view === 'students' || view === 'student' ? 'active' : ''} onClick={() => setView('students')}><UsersRound size={20} /><span>학생</span></button>
       </nav>
 
-      {termSchedulesOpen && <TermScheduleModal
+      {termScheduleMode && <TermScheduleModal
+        mode={termScheduleMode}
         backups={appState.scheduleBackups.filter((backup) => backup.kind === 'term').sort((a, b) => b.createdAt.localeCompare(a.createdAt))}
         lessonCount={appState.lessons.length}
         onSave={saveTermSchedule}
         onRestore={restoreTermSchedule}
-        onClose={() => setTermSchedulesOpen(false)}
+        onClose={() => setTermScheduleMode(null)}
       />}
 
       {lessonModal.open && (
