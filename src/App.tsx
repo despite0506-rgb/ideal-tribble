@@ -251,6 +251,17 @@ function initials(name: string): string {
   return name.trim().slice(-2)
 }
 
+const COMPOUND_KOREAN_SURNAMES = new Set(['남궁', '독고', '동방', '망절', '사공', '서문', '선우', '소봉', '어금', '제갈', '황보'])
+
+function studentGivenName(fullName: string): string {
+  const name = fullName.trim()
+  const spacedName = /^([가-힣]{1,2})\s+([가-힣]+)$/.exec(name)
+  if (spacedName && (spacedName[1]!.length === 1 || COMPOUND_KOREAN_SURNAMES.has(spacedName[1]!))) return spacedName[2]!
+  if (!/^[가-힣]{3,}$/.test(name)) return name
+  const surnameLength = name.length >= 4 && COMPOUND_KOREAN_SURNAMES.has(name.slice(0, 2)) ? 2 : 1
+  return name.slice(surnameLength)
+}
+
 function transportText(transport: Transport): string {
   const rides = [
     transport.arrivalRide ? `등원${Number.isInteger(transport.arrivalMinute) ? ` ${minutesToTime(transport.arrivalMinute as number)}` : ''}` : '',
@@ -337,6 +348,8 @@ function LessonCardContent({
     .map((participant) => ({ participant, student: studentById(students, participant.studentId) }))
     .filter((entry): entry is { participant: Lesson['participants'][number]; student: Student } => Boolean(entry.student))
 
+  const titleRepeatsName = participants.length === 1 && lesson.label.trim() === participants[0]?.student.name.trim()
+
   return (
     <>
       <div className="lesson-card-topline">
@@ -348,17 +361,17 @@ function LessonCardContent({
           {lesson.kind === 'group' && <span className="kind-badge" aria-label={`${lesson.participants.length}명`}>{lesson.participants.length}</span>}
         </span>
       </div>
-      <strong className="lesson-title">{lesson.label || '수업'}</strong>
+      {!titleRepeatsName && <strong className="lesson-title">{lesson.label || '수업'}</strong>}
       {participants.length > 0 && (
         <div className="lesson-people">
-          {participants.map(({ student }) => <span key={student.id}>{student.name}</span>)}
+          {participants.map(({ student }) => <span key={student.id} title={student.name}>{studentGivenName(student.name)}</span>)}
         </div>
       )}
       {transportEnabled && (
         <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
           {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
             <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
-              {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
+              {participants.length > 1 && <span className="ride-name">{studentGivenName(student.name)}</span>}
               <RidePills transport={participant.transport} compact />
             </span>
           ))}
