@@ -1549,7 +1549,7 @@ body.sidebar-resizing {
   padding: 1px 4px;
   border-radius: 3px;
   background: rgba(255, 255, 255, .82);
-  box-shadow: inset 0 0 0 1px var(--name-grade-color);
+  box-shadow: inset 0 0 0 2px var(--name-grade-color);
   overflow-wrap: anywhere;
 }
 
