@@ -29,6 +29,16 @@ describe('student transfers', () => {
     expect(result.students.find(({ id }) => id === studentId)?.rosterTeachers).toEqual({ 'teacher-3': true })
   })
 
+  it('leaves Korean lessons with their teacher when moving the math roster entry', () => {
+    const studentId = 'student-harin'
+    const koreanLesson = { ...DEMO_STATE.lessons.find(({ id }) => id === 'lesson-tue-harin')!, id: 'korean-lesson', label: '국어 독해' }
+    const lessons = [...DEMO_STATE.lessons, koreanLesson]
+    const result = moveStudentToTeacher(lessons, DEMO_STATE.students, studentId, 'teacher-1', 'teacher-2', 'transfer')
+    if (!('lessons' in result)) throw new Error(result.error)
+    expect(result.lessons.find(({ id }) => id === koreanLesson.id)).toBe(koreanLesson)
+    expect(result.lessons.find(({ id }) => id === 'lesson-tue-harin')?.teacherId).toBe('teacher-2')
+  })
+
   it('moves only the selected student and keeps valid two-person group remnants', () => {
     const { students, lessons } = DEMO_STATE
     const result = moveStudentToTeacher(lessons, students, 'student-harin', 'teacher-1', 'teacher-2', 'transfer')

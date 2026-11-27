@@ -79,6 +79,7 @@ import {
   getTodayWeekday,
   groupLessonsBySeries,
   inferStudentSubjects,
+  isKoreanLesson,
   intervalsOverlap,
   layoutLessons,
   lessonsForStudent,
@@ -640,6 +641,7 @@ function groupStudentsByGrade(students: Student[]) {
 
 function StudentQuickLinks({
   students,
+  title = '학년별 학생',
   assignedStudentIds,
   teacherNames,
   highlightedTeachers,
@@ -647,6 +649,7 @@ function StudentQuickLinks({
   onOpenStudent,
 }: {
   students: Student[]
+  title?: string
   assignedStudentIds: Set<string>
   teacherNames: ScheduleSettings['teacherNames']
   highlightedTeachers: ReadonlySet<TeacherId>
@@ -671,7 +674,7 @@ function StudentQuickLinks({
   return (
     <section className="student-quick-panel" aria-labelledby="student-quick-title">
       <header>
-        <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">학년별 학생</h2></div>
+        <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">{title}</h2></div>
         <div className="student-quick-actions">
           <div className="student-highlight-buttons" role="group" aria-label="선생님별 색상 표시">
             {TEACHERS.map(({ id, index }) => (
@@ -755,7 +758,7 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
 
   return (
     <section className="student-quick-panel teacher-roster" aria-labelledby="teacher-roster-title">
-      <header><div><h2 id="teacher-roster-title">선생님별 학생</h2><p>학생 이름을 원하는 반으로 끌어 놓으세요.</p></div></header>
+      <header><div><h2 id="teacher-roster-title">선생님별 수학 학생</h2><p>학생 이름을 원하는 반으로 끌어 놓으세요.</p></div></header>
       <div className="teacher-roster-sections">
         {[...rosters, { id: null, name: '미배정', members: unassigned }].map(({ id, name, members }) => {
           if (id === null && members.length === 0) return null
@@ -822,6 +825,34 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
           ))}
         </div>
       )}
+    </section>
+  )
+}
+
+function KoreanStudentRoster({ students, onOpenStudent }: {
+  students: Student[]
+  onOpenStudent: (studentId: string) => void
+}) {
+  return (
+    <section className="student-quick-panel teacher-roster" aria-labelledby="korean-roster-title">
+      <header><h2 id="korean-roster-title">윤지T 국어 학생 · {students.length}명</h2></header>
+      <div className="grade-group teacher-roster-section">
+        {students.length === 0 ? <p>표시할 국어 학생이 없습니다.</p> : (
+          <div className="roster-grade-groups">
+            {groupStudentsByGrade(students).map(({ label, students: classmates }) => (
+              <ul key={label} className="roster-student-grid" aria-label={label}>
+                {classmates.map((student) => (
+                  <li key={student.id}>
+                    <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
+                      <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -4123,13 +4154,35 @@ export default function App() {
     const normalized = studentPageQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade} ${student.guardianName} ${student.guardianPhone}`.toLocaleLowerCase('ko').includes(normalized)
   })
+  const { mathLessons, koreanLessonStudentIds } = useMemo(() => {
+    const mathLessons: Lesson[] = []
+    const koreanLessonStudentIds = new Set<string>()
+    for (const lesson of appState.lessons) {
+      if (isKoreanLesson(lesson)) {
+        for (const { studentId } of lesson.participants) koreanLessonStudentIds.add(studentId)
+      } else {
+        mathLessons.push(lesson)
+      }
+    }
+    return { mathLessons, koreanLessonStudentIds }
+  }, [appState.lessons])
+  const koreanPageStudents: Student[] = []
+  const mathPageStudents: Student[] = []
+  if (view === 'students') {
+    for (const student of pageStudents) {
+      const subjects = getStudentSubjects(student, appState.lessons)
+      if (subjects.includes('korean') || koreanLessonStudentIds.has(student.id)) koreanPageStudents.push(student)
+      if (subjects.includes('math') || subjects.length === 0) mathPageStudents.push(student)
+    }
+  }
   const automaticBackup = appState.scheduleBackups.filter((backup) => backup.kind !== 'term').at(-1)
   const teacherLessons = useMemo(() => (
     appState.lessons.filter((lesson) => lesson.teacherId === activeTeacherId)
   ), [appState.lessons, activeTeacherId])
+  const highlightLessons = view === 'students' ? mathLessons : appState.lessons
   const highlightedStudentIds = useMemo(() => {
     const highlightedIds = new Set<string>()
-    for (const lesson of appState.lessons) {
+    for (const lesson of highlightLessons) {
       for (const { studentId } of lesson.participants) {
         if (highlightedTeachers.has(lesson.teacherId)) highlightedIds.add(studentId)
       }
@@ -4139,7 +4192,7 @@ export default function App() {
       if ([...highlightedTeachers].some((teacherId) => assigned[teacherId])) highlightedIds.add(student.id)
     }
     return highlightedIds
-  }, [appState.lessons, appState.students, highlightedTeachers])
+  }, [highlightLessons, appState.students, highlightedTeachers])
   const groupSeries = useMemo(() => groupLessonsBySeries(teacherLessons), [teacherLessons])
   const selectedStudent = selectedStudentId === 'all' ? undefined : studentById(appState.students, selectedStudentId)
   const detailStudent = detailStudentId ? studentById(appState.students, detailStudentId) : undefined
@@ -5165,19 +5218,20 @@ export default function App() {
             </div>
             {studentGrouping === 'grade'
               ? <StudentQuickLinks
-                  students={pageStudents}
+                  title="학년별 수학 학생"
+                  students={mathPageStudents}
                   assignedStudentIds={highlightedStudentIds}
                   teacherNames={scheduleSettings.teacherNames}
                   highlightedTeachers={highlightedTeachers}
                   onToggleTeacher={toggleTeacherHighlight}
                   onOpenStudent={showStudentDetail}
                 />
-              : <StudentsByTeacher students={pageStudents} lessons={appState.lessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
+              : <StudentsByTeacher students={mathPageStudents} lessons={mathLessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
-            ) : (
+            ) : mathPageStudents.length > 0 && (
               <div className="student-card-grid">
-                {pageStudents.map((student) => {
+                {mathPageStudents.map((student) => {
                   const studentLessons = lessonsForStudent(appState.lessons, student.id)
                   return (
                     <article className="student-card" key={student.id}>
@@ -5199,6 +5253,7 @@ export default function App() {
                 })}
               </div>
             )}
+            <KoreanStudentRoster students={koreanPageStudents} onOpenStudent={showStudentDetail} />
           </section>
         ) : detailStudent ? (
           <StudentDetail

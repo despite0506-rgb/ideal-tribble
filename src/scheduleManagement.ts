@@ -1,4 +1,4 @@
-import { getRosterTeachers } from './domain'
+import { getRosterTeachers, isKoreanLesson } from './domain'
 import type { Lesson, ScheduleBackup, Student, TeacherId } from './types'
 
 function withParticipants(lesson: Lesson, participants: Lesson['participants']): Lesson {
@@ -18,7 +18,7 @@ export function moveStudentToTeacher(
 ): { lessons: Lesson[]; students: Student[] } | { error: string } {
   const student = students.find((item) => item.id === studentId)
   if (!student || from === to) return { error: '학생을 옮길 반을 확인해 주세요.' }
-  const studentLessons = lessons.filter((lesson) => lesson.participants.some((member) => member.studentId === studentId))
+  const studentLessons = lessons.filter((lesson) => !isKoreanLesson(lesson) && lesson.participants.some((member) => member.studentId === studentId))
   const source = studentLessons.filter((lesson) => lesson.teacherId === from)
   const rosterTeachers = { ...getRosterTeachers(student) }
   const movesAssignment = from === null

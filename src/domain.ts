@@ -379,10 +379,14 @@ export type TuitionBreakdownItem = {
   amount: number
 }
 
+export function isKoreanLesson(lesson: Pick<Lesson, 'label'>): boolean {
+  return lesson.label.includes('국어') || lesson.label.toLocaleLowerCase('ko').includes('korean')
+}
+
 export function inferStudentSubjects(student: Student, lessons: Lesson[]): StudentSubject[] {
   const studentLessons = lessonsForStudent(lessons, student.id)
   const subjects: StudentSubject[] = []
-  if (studentLessons.some((lesson) => lesson.label.toLocaleLowerCase('ko').includes('korean') || lesson.label.includes('국어'))) subjects.push('korean')
+  if (studentLessons.some(isKoreanLesson)) subjects.push('korean')
   if (studentLessons.some((lesson) => lesson.label.toLocaleLowerCase('ko').includes('math') || lesson.label.includes('수학'))) subjects.push('math')
   if (subjects.length === 0 && /^(초|중|고)/.test(getStudentGradeGroup(student))) subjects.push('math')
   return subjects
