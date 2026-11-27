@@ -29,7 +29,6 @@ import {
   Maximize2,
   Minimize2,
   MessageSquare,
-  Palette,
   Pencil,
   Plus,
   RotateCcw,
@@ -122,7 +121,7 @@ type LessonTimeValue = {
   end: string
 }
 
-const PIXELS_PER_MINUTE = 1.4
+const PIXELS_PER_MINUTE = 1.6
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
 const SIDEBAR_MIN_WIDTH = 190
@@ -326,12 +325,14 @@ function LessonCardContent({
   lesson,
   students,
   transportEnabled,
+  showStudentAvatars,
   showStudentNames,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
   transportEnabled: boolean
+  showStudentAvatars: boolean
   showStudentNames: boolean
   dense?: boolean
 }) {
@@ -350,11 +351,17 @@ function LessonCardContent({
           {lesson.kind === 'group' && <span className="kind-badge" aria-label={`${lesson.participants.length}명`}>{lesson.participants.length}</span>}
         </span>
       </div>
-      <strong className="lesson-title">
-        {showStudentNames && participants.length > 0
-          ? participants.map(({ student }) => student.name).join(' · ')
-          : lesson.label || '수업'}
-      </strong>
+      <strong className="lesson-title">{lesson.label || '수업'}</strong>
+      {(showStudentAvatars || showStudentNames) && (
+        <div className="lesson-people">
+          {showStudentAvatars && (
+            <span className="mini-avatars" aria-hidden="true">
+              {participants.map(({ student }) => <Avatar key={student.id} student={student} size="sm" />)}
+            </span>
+          )}
+          {showStudentNames && <span>{participants.map(({ student }) => student.name).join(' · ')}</span>}
+        </div>
+      )}
       {transportEnabled && (
         <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
           {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
@@ -476,19 +483,18 @@ function Timeline({
                   const lessonColor = getLessonColor(lesson, students)
                   const clippedStart = Math.max(lesson.startMinute, start)
                   const clippedEnd = Math.min(lesson.endMinute, end)
-                  const cardHeight = Math.max((clippedEnd - clippedStart) * pixelsPerMinute - 4, settings.density === 'compact' ? 28 : 34)
                   const cardStyle = {
-                    top: (clippedStart - start) * pixelsPerMinute + 2,
-                    height: cardHeight,
-                    left: `calc(${lesson.column * width}% + 2px)`,
-                    width: `calc(${width}% - 4px)`,
+                    top: (clippedStart - start) * pixelsPerMinute + 3,
+                    height: Math.max((clippedEnd - clippedStart) * pixelsPerMinute - 6, settings.density === 'compact' ? 28 : 34),
+                    left: `calc(${lesson.column * width}% + 3px)`,
+                    width: `calc(${width}% - 6px)`,
                     '--lesson-color': lessonColor,
                     '--lesson-color-2': lessonColor,
                   } as CSSProperties
                   return (
                     <button
                       type="button"
-                      className={`lesson-card ${lesson.kind}${cardHeight < 48 ? ' is-short' : ''}${selectedStudentId !== 'all' ? ' is-focused' : ''}`}
+                      className={`lesson-card ${lesson.kind}${selectedStudentId !== 'all' ? ' is-focused' : ''}`}
                       style={cardStyle}
                       onClick={() => onOpenLesson(lesson.id)}
                       key={lesson.id}
@@ -500,6 +506,7 @@ function Timeline({
                         lesson={lesson}
                         students={students}
                         transportEnabled={settings.transportEnabled}
+                        showStudentAvatars={settings.showStudentAvatars}
                         showStudentNames={settings.showStudentNames}
                         dense={(lesson.endMinute - lesson.startMinute) < 45}
                       />
@@ -523,6 +530,7 @@ function LessonList({
   selectedDay,
   onSelectDay,
   transportEnabled,
+  showStudentAvatars,
   showStudentNames,
   mobileOnly = false,
   closures,
@@ -534,6 +542,7 @@ function LessonList({
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   transportEnabled: boolean
+  showStudentAvatars: boolean
   showStudentNames: boolean
   mobileOnly?: boolean
   closures: HolidayClosure[]
@@ -600,6 +609,7 @@ function LessonList({
                       lesson={lesson}
                       students={students}
                       transportEnabled={transportEnabled}
+                      showStudentAvatars={showStudentAvatars}
                       showStudentNames={showStudentNames}
                     />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
@@ -631,9 +641,24 @@ function groupStudentsByGrade(students: Student[]) {
     .sort((a, b) => gradeGroupSortValue(a.label) - gradeGroupSortValue(b.label) || a.label.localeCompare(b.label, 'ko'))
 }
 
+const STUDENT_GRADE_COLORS: Record<string, string> = {
+  초1: '#fce5ec', 초2: '#f9cddc', 초3: '#f5b3cb', 초4: '#f19ab5', 초5: '#ee819d', 초6: '#eb6883',
+  중1: '#e4f3b5', 중2: '#c6e79a', 중3: '#9bd5a3',
+  고1: '#def3ff', 고2: '#bce8fb', 고3: '#98d6f5',
+}
+
+function studentGradeColor(grade: string): string {
+  return STUDENT_GRADE_COLORS[grade] ?? '#e8edf0'
+}
+
+function RosterGrade({ grade }: { grade: string }) {
+  return <span className="roster-grade" style={{ backgroundColor: studentGradeColor(grade) }}>({grade})</span>
+}
+
 function StudentQuickLinks({
   students,
   title = '학년별 학생',
+  colorByGrade = false,
   assignedStudentIds,
   teacherNames,
   highlightedTeachers,
@@ -642,6 +667,7 @@ function StudentQuickLinks({
 }: {
   students: Student[]
   title?: string
+  colorByGrade?: boolean
   assignedStudentIds: Set<string>
   teacherNames: ScheduleSettings['teacherNames']
   highlightedTeachers: ReadonlySet<TeacherId>
@@ -664,7 +690,7 @@ function StudentQuickLinks({
   }
 
   return (
-    <section className="student-quick-panel" aria-labelledby="student-quick-title">
+    <section className={`student-quick-panel${colorByGrade ? ' student-grade-colors' : ''}`} aria-labelledby="student-quick-title">
       <header>
         <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">{title}</h2></div>
         <div className="student-quick-actions">
@@ -692,7 +718,7 @@ function StudentQuickLinks({
                   <button
                     type="button"
                     className={`student-quick-button${assignedStudentIds.has(student.id) ? ' is-assigned' : ' is-unassigned'}`}
-                    style={{ '--student-color': student.color } as CSSProperties}
+                    style={{ '--student-color': colorByGrade ? studentGradeColor(group.label) : student.color } as CSSProperties}
                     key={student.id}
                     onClick={() => onOpenStudent(student.id)}
                     aria-label={`${group.label} ${student.name}, 학생 페이지 열기`}
@@ -799,7 +825,7 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
                                 if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
                                 suppressClick.current = false
                               }}>
-                              <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                              <RosterGrade grade={label} /><span>{student.name}</span>
                             </button>
                           </li>
                         )
@@ -838,7 +864,7 @@ function KoreanStudentRoster({ students, onOpenStudent }: {
               {classmates.map((student) => (
                 <li key={student.id}>
                   <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
-                    <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                    <RosterGrade grade={label} /><span>{student.name}</span>
                   </button>
                 </li>
               ))}
@@ -1519,60 +1545,6 @@ function StudentSubjectsModal({ students, lessons, onClose, onSave }: {
     </div>
     <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="button" className="button primary" onClick={() => onSave(students.map((student) => ({ ...student, subjects: subjectsFromChoice(choices[student.id] ?? 'math') })))}>전체 과목 저장</button></footer>
   </ModalFrame>
-}
-
-function SchoolColorModal({
-  students,
-  onClose,
-  onSave,
-}: {
-  students: Student[]
-  onClose: () => void
-  onSave: (colors: Record<string, string>) => void
-}) {
-  const schools = [...new Set(students.map((student) => student.school).filter(Boolean))].sort((first, second) => (
-    first.localeCompare(second, 'ko')
-  ))
-  const [colors, setColors] = useState<Record<string, string>>(() => Object.fromEntries(
-    schools.map((school) => [school, students.find((student) => student.school === school)?.color ?? '#2f6f68']),
-  ))
-
-  return (
-    <ModalFrame title="학교별 학생 색상" eyebrow="같은 학교는 같은 색으로 일괄 적용" onClose={onClose} wide>
-      <form onSubmit={(event) => { event.preventDefault(); onSave(colors) }}>
-        <div className="modal-body">
-          <p className="school-color-guide">학교마다 대표 색상을 하나씩 선택하세요. 저장하면 해당 학교 학생 전체의 색상이 함께 변경됩니다.</p>
-          <div className="school-color-list">
-            {schools.map((school) => (
-              <fieldset key={school}>
-                <legend><strong>{school}</strong><span>{students.filter((student) => student.school === school).length}명</span></legend>
-                <div className="school-color-options">
-                  {STUDENT_COLORS.map((color) => (
-                    <button
-                      type="button"
-                      key={color}
-                      className={colors[school] === color ? 'selected' : ''}
-                      style={{ '--student-color': color } as CSSProperties}
-                      onClick={() => setColors((current) => ({ ...current, [school]: color }))}
-                      aria-label={`${school} 색상 ${color}`}
-                      aria-pressed={colors[school] === color}
-                    >
-                      {colors[school] === color && <Check size={13} />}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            ))}
-          </div>
-        </div>
-        <footer className="modal-footer">
-          <span className="footer-spacer" />
-          <button type="button" className="button secondary" onClick={onClose}>취소</button>
-          <button type="submit" className="button primary">학교별 색상 적용</button>
-        </footer>
-      </form>
-    </ModalFrame>
-  )
 }
 
 function LessonStudentPicker({
@@ -2275,7 +2247,7 @@ function LessonModal({
               <button
                 type="button"
                 className={`lesson-color-auto${color === '' ? ' selected' : ''}`}
-                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students) } as CSSProperties}
+                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students, label) } as CSSProperties}
                 onClick={() => setColor('')}
                 aria-pressed={color === ''}
               >
@@ -2295,14 +2267,14 @@ function LessonModal({
               <label className={`lesson-custom-color${color && !LESSON_COLORS.includes(color as typeof LESSON_COLORS[number]) ? ' selected' : ''}`}>
                 <input
                   type="color"
-                  value={color || getDefaultLessonColor(participantIds, students)}
+                  value={color || getDefaultLessonColor(participantIds, students, label)}
                   onChange={(event) => setColor(event.target.value)}
                   aria-label="직접 수업 색상 선택"
                 />
                 직접 선택
               </label>
             </div>
-            <p><span className="elementary" />초등 분홍·빨강 <span className="middle" />중등 연두·초록 <span className="high" />고등 하늘 · 학년이 높을수록 진해져요</p>
+            <p><span className="elementary" />초등 분홍 <span className="middle" />중등 하늘 <span className="high" />고등 노랑 · 국어는 같은 계열에서 더 선명하게</p>
           </fieldset>
           <fieldset className="weekday-picker">
             <legend>
@@ -4104,7 +4076,6 @@ export default function App() {
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
-  const [schoolColorModalOpen, setSchoolColorModalOpen] = useState(false)
   const [studentSubjectsModalOpen, setStudentSubjectsModalOpen] = useState(false)
   const [nameSettingsOpen, setNameSettingsOpen] = useState(false)
   const [operationsWeekStart, setOperationsWeekStart] = useState(() => weekStartValue())
@@ -4614,18 +4585,6 @@ export default function App() {
     setAppState((current) => ({ ...current, students: [...current.students, ...students] }))
     setBulkStudentModalOpen(false)
     setNotice(`${students.length}명의 학생을 등록했습니다.`)
-  }
-
-  const saveSchoolColors = (colors: Record<string, string>) => {
-    setAppState((current) => ({
-      ...current,
-      students: current.students.map((student) => ({
-        ...student,
-        color: colors[student.school] ?? student.color,
-      })),
-    }))
-    setSchoolColorModalOpen(false)
-    setNotice('학교별 학생 색상을 일괄 적용했습니다.')
   }
 
   const saveStudentSubjects = (students: Student[]) => {
@@ -5141,6 +5100,11 @@ export default function App() {
                   </div>
                   <div className="lesson-content-settings" aria-label="수업 카드 표시 설정">
                     <Toggle
+                      label="학생 아이콘"
+                      checked={scheduleSettings.showStudentAvatars}
+                      onChange={(showStudentAvatars) => setScheduleSettings((current) => ({ ...current, showStudentAvatars }))}
+                    />
+                    <Toggle
                       label="학생 이름"
                       checked={scheduleSettings.showStudentNames}
                       onChange={(showStudentNames) => setScheduleSettings((current) => ({ ...current, showStudentNames }))}
@@ -5168,10 +5132,10 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} closures={appState.holidayClosures} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} onMoveLesson={moveLesson} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
                 </>
               )}
             </section>
@@ -5227,7 +5191,6 @@ export default function App() {
                 <span>{pageStudents.length}명의 공유 학생</span>
                 <StudentSortControl mode={studentSortMode} onChange={setStudentSortMode} />
                 <button type="button" className="button secondary" onClick={() => setStudentSubjectsModalOpen(true)}><BookOpen size={15} /> 과목 일괄설정</button>
-                <button type="button" className="button secondary" onClick={() => setSchoolColorModalOpen(true)}><Palette size={15} /> 학교별 색상</button>
               </div>
             </div>
             <div className="student-group-switch" aria-label="학생 보기 방식">
@@ -5237,6 +5200,7 @@ export default function App() {
             {studentGrouping === 'grade'
               ? <StudentQuickLinks
                   title="학년별 수학 학생"
+                  colorByGrade
                   students={mathPageStudents}
                   assignedStudentIds={highlightedStudentIds}
                   teacherNames={scheduleSettings.teacherNames}
@@ -5254,7 +5218,7 @@ export default function App() {
                   return (
                     <article className="student-card" key={student.id}>
                       <header>
-                        <Avatar student={student} size="lg" />
+                        <Avatar student={{ ...student, color: studentGradeColor(getStudentGradeGroup(student)) }} size="lg" />
                         <div><div className="student-card-name"><h2>{student.name}</h2><StudentSubjectTag student={student} lessons={appState.lessons} /></div><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p></div>
                         <button type="button" className="icon-button" onClick={() => setStudentModal({ open: true, studentId: student.id })} aria-label={`${student.name} 정보 수정`}><Pencil size={17} /></button>
                       </header>
@@ -5381,13 +5345,6 @@ export default function App() {
           transportEnabled={scheduleSettings.transportEnabled}
           onClose={() => setBulkStudentModalOpen(false)}
           onSave={saveBulkStudents}
-        />
-      )}
-      {schoolColorModalOpen && (
-        <SchoolColorModal
-          students={appState.students}
-          onClose={() => setSchoolColorModalOpen(false)}
-          onSave={saveSchoolColors}
         />
       )}
       {studentSubjectsModalOpen && (

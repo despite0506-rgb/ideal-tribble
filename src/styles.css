@@ -1449,15 +1449,14 @@ body.sidebar-resizing {
 .lesson-card {
   position: absolute;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: block;
+  min-height: 34px;
   overflow: hidden;
-  padding: 4px 5px;
+  padding: 6px 7px;
   border: 1px solid rgba(81, 115, 108, 0.1);
   border-radius: 0;
   color: var(--text);
-  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 72%, white);
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 34%, white);
   box-shadow: none;
   cursor: pointer;
   text-align: left;
@@ -1467,8 +1466,8 @@ body.sidebar-resizing {
 .lesson-card.group {
   border-color: rgba(81, 91, 115, 0.11);
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 74%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 65%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 38%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 30%, white));
 }
 
 .lesson-card:hover,
@@ -1485,7 +1484,6 @@ body.sidebar-resizing {
 
 .lesson-card-topline {
   display: flex;
-  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
@@ -1534,11 +1532,15 @@ body.sidebar-resizing {
 .lesson-time {
   overflow: hidden;
   color: #31544e;
-  font-size: 10px;
+  font-size: 8px;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.group .lesson-time {
+  color: color-mix(in srgb, var(--lesson-color, var(--purple)) 72%, #263b36);
 }
 
 .kind-badge {
@@ -1553,12 +1555,43 @@ body.sidebar-resizing {
 
 .lesson-title {
   display: block;
-  margin-top: 2px;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.25;
   overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.lesson-people {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: #455c56;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.lesson-people > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-avatars {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding-left: 2px;
+}
+
+.mini-avatars .avatar {
+  width: 17px;
+  height: 17px;
+  margin-left: -3px;
+  font-size: 6px;
 }
 
 .lesson-rides {
@@ -1579,21 +1612,19 @@ body.sidebar-resizing {
   font-size: 7px;
 }
 
-.lesson-card.is-short {
-  padding: 2px 4px;
-}
-
-.lesson-card.is-short .lesson-time {
-  font-size: 8px;
-}
-
-.lesson-card.is-short .lesson-title {
-  margin-top: 0;
-  font-size: 11px;
-}
-
-.lesson-card.is-short .lesson-rides {
+.lesson-card[style*="height: 34"] .lesson-people,
+.lesson-card[style*="height: 34"] .lesson-rides {
   display: none;
+}
+
+.lesson-card[style*="height: 34"] {
+  padding: 3px 5px;
+}
+
+.lesson-card[style*="height: 34"] .lesson-title {
+  margin-top: 1px;
+  font-size: 8px;
+  line-height: 1.05;
 }
 
 .mobile-schedule {
@@ -1657,11 +1688,11 @@ body.sidebar-resizing {
   position: relative;
   display: block;
   width: 100%;
-  min-height: 66px;
-  padding: 8px 32px 8px 9px;
+  min-height: 108px;
+  padding: 11px 38px 10px 12px;
   border: 1px solid rgba(81, 115, 108, 0.11);
   border-radius: 0;
-  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 72%, white);
+  background: color-mix(in srgb, var(--lesson-color, var(--brand)) 28%, white);
   cursor: pointer;
   text-align: left;
 }
@@ -1669,8 +1700,8 @@ body.sidebar-resizing {
 .lesson-list-card.group {
   border-color: rgba(81, 91, 115, 0.12);
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--lesson-color, var(--purple)) 74%, white),
-    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 65%, white));
+    color-mix(in srgb, var(--lesson-color, var(--purple)) 32%, white),
+    color-mix(in srgb, var(--lesson-color-2, var(--purple)) 25%, white));
 }
 
 .combined-day-label {
@@ -1689,7 +1720,9 @@ body.sidebar-resizing {
 }
 
 .lesson-list-card .lesson-time { font-size: 11px; }
-.lesson-list-card .lesson-title { margin-top: 3px; font-size: 14px; }
+.lesson-list-card .lesson-title { margin-top: 5px; font-size: 13px; }
+.lesson-list-card .lesson-people { margin-top: 6px; font-size: 10px; }
+.lesson-list-card .mini-avatars .avatar { width: 22px; height: 22px; font-size: 7px; }
 .lesson-list-card .lesson-rides { display: flex; margin-top: 8px; }
 .lesson-list-card .ride-pills-compact .ride-pill { min-height: 20px; padding: 2px 6px; font-size: 8px; }
 
@@ -2280,8 +2313,9 @@ body.sidebar-resizing {
 .paste-lesson-button { color: #6555a2 !important; border-color: #d4ccef !important; background: #f8f6ff !important; }
 .undo-move-button { color: #8a641e !important; border-color: #e1cf9d !important; background: #fffaf0 !important; }
 .density-setting { min-width: 122px; }
-.schedule-panel.density-compact .lesson-list-card { min-height: 58px; padding-top: 6px; padding-bottom: 6px; }
+.schedule-panel.density-compact .lesson-list-card { min-height: 76px; padding-top: 7px; padding-bottom: 7px; }
 .schedule-panel.density-compact .lesson-list-cards { gap: 6px; padding: 7px; }
+.schedule-panel.density-compact .lesson-people,
 .schedule-panel.density-compact .lesson-rides { margin-top: 2px; }
 
 .merge-lessons-button { color: #6555a2; border-color: #d4ccef; background: #f8f6ff; }
@@ -3298,9 +3332,9 @@ body.sidebar-resizing {
 }
 
 .lesson-color-picker > p > span:first-child { margin-left: 0; }
-.lesson-color-picker > p > .elementary { background: #ef8caa; }
-.lesson-color-picker > p > .middle { background: #a6d86f; }
-.lesson-color-picker > p > .high { background: #9ad8f7; }
+.lesson-color-picker > p > .elementary { background: #e78fb1; }
+.lesson-color-picker > p > .middle { background: #72b9e6; }
+.lesson-color-picker > p > .high { background: #e3b84f; }
 
 .weekday-picker legend {
   display: flex;
@@ -3631,63 +3665,6 @@ button.selected-student-chip {
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
-}
-
-.school-color-guide {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.school-color-list {
-  display: grid;
-  gap: 8px;
-}
-
-.school-color-list fieldset {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-subtle);
-}
-
-.school-color-list legend {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 6px;
-  padding: 0 3px;
-}
-
-.school-color-list legend strong { font-size: 11px; }
-.school-color-list legend span { margin-left: auto; color: var(--text-light); font-size: 9px; }
-
-.school-color-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.school-color-options button {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  padding: 0;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  color: #fff;
-  background: var(--student-color);
-  box-shadow: 0 0 0 1px var(--border);
-  cursor: pointer;
-}
-
-.school-color-options button.selected {
-  box-shadow: 0 0 0 2px var(--brand), 0 3px 8px rgba(18, 38, 32, 0.16);
 }
 
 .color-options {
@@ -4806,7 +4783,7 @@ button.selected-student-chip {
   .mobile-schedule .lesson-list-day > header { min-height: 49px; padding: 0 14px; }
   .mobile-schedule .lesson-list-cards { padding: 11px; }
   .mobile-schedule .empty-day { min-height: 220px; }
-  .lesson-list-card { min-height: 66px; }
+  .lesson-list-card { min-height: 113px; }
   .student-card-grid { grid-template-columns: 1fr; }
   .attendance-report-toolbar { flex-wrap: wrap; }
   .month-selector,
@@ -5123,6 +5100,12 @@ button.selected-student-chip {
   text-shadow: none;
 }
 
+.student-grade-colors .student-quick-button,
+.student-card > header > .avatar {
+  color: var(--text);
+  text-shadow: none;
+}
+
 .teacher-roster .roster-grade {
   padding: 3px 5px;
   border-radius: 4px;
@@ -5148,21 +5131,6 @@ button.selected-student-chip {
     padding-inline: 2px;
     font-size: 10px;
   }
-}
-
-.teacher-roster .roster-grade[data-grade^="초"] {
-  color: #8c294e;
-  background: #fce6ef;
-}
-
-.teacher-roster .roster-grade[data-grade^="중"] {
-  color: #1f5483;
-  background: #e3f1ff;
-}
-
-.teacher-roster .roster-grade[data-grade^="고"] {
-  color: #735305;
-  background: #fff0c5;
 }
 
 .teacher-roster .roster-student {
