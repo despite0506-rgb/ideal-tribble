@@ -12,8 +12,8 @@ import {
   type CloudRow,
 } from './cloud'
 import { mergeCloudPayload } from './cloudMerge'
-import { DEFAULT_SCHEDULE_SETTINGS } from './storage'
-import type { AppState, ScheduleSettings } from './types'
+import { clearMigratedLabDrafts, DEFAULT_SCHEDULE_SETTINGS, loadLocalLabDrafts, mergeLocalLabDrafts } from './storage'
+import type { AppState, ScheduleDraft, ScheduleSettings } from './types'
 
 export type CloudPhase = 'checking' | 'signed-out' | 'loading' | 'needs-initialization' | 'ready' | 'error'
 export type CloudSaveStatus = 'idle' | 'saving' | 'synced' | 'error'
@@ -76,6 +76,7 @@ export function useCloudSync({
   const [ownerId, setOwnerId] = useState<string | null>(null)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
   const [saveRetry, setSaveRetry] = useState(0)
+  const pendingLocalDrafts = useRef<ScheduleDraft[]>([])
   const lastSyncedJson = useRef('')
   const basePayload = useRef<CloudPayload | null>(null)
   const revision = useRef(0)
@@ -91,7 +92,7 @@ export function useCloudSync({
   const currentPayload = useRef(payload)
   currentPayload.current = payload
 
-  const applyCloudRow = useCallback((row: CloudRow): boolean => {
+  const applyCloudRow = useCallback((row: CloudRow, importLocalDrafts = true): boolean => {
     const parsed = parseCloudPayload(row.payload)
     if (!parsed) {
       setError('클라우드에 저장된 자료 형식을 읽을 수 없습니다. 기존 브라우저 자료는 그대로 보존되어 있습니다.')
@@ -101,7 +102,13 @@ export function useCloudSync({
     lastSyncedJson.current = JSON.stringify(parsed)
     basePayload.current = parsed
     revision.current = row.revision
-    setAppState(parsed.appState)
+    const local = importLocalDrafts ? loadLocalLabDrafts() : []
+    const remoteDrafts = new Map(parsed.appState.labDrafts.map((draft) => [draft.id, draft]))
+    pendingLocalDrafts.current = local.filter((draft) => (remoteDrafts.get(draft.id)?.updatedAt ?? '') < draft.updatedAt || !remoteDrafts.has(draft.id))
+    clearMigratedLabDrafts(local.filter((draft) => !pendingLocalDrafts.current.includes(draft)))
+    setAppState(pendingLocalDrafts.current.length > 0
+      ? { ...parsed.appState, labDrafts: mergeLocalLabDrafts(parsed.appState.labDrafts, pendingLocalDrafts.current) }
+      : parsed.appState)
     setScheduleSettings(parsed.scheduleSettings)
     setLastSavedAt(row.updated_at)
     setSaveStatus('synced')
@@ -128,6 +135,13 @@ export function useCloudSync({
     setAppState(merged.appState)
     setScheduleSettings(merged.scheduleSettings)
     setLastSavedAt(row.updated_at)
+    const imported = new Map(remote.appState.labDrafts.map((draft) => [draft.id, draft]))
+    const confirmed = pendingLocalDrafts.current.filter((draft) => {
+      const saved = imported.get(draft.id)
+      return saved && saved.updatedAt >= draft.updatedAt
+    })
+    clearMigratedLabDrafts(confirmed)
+    pendingLocalDrafts.current = pendingLocalDrafts.current.filter((draft) => !confirmed.includes(draft))
     setSaveStatus(mergedJson === remoteJson ? 'synced' : 'saving')
     setError(null)
     return true
@@ -212,6 +226,8 @@ export function useCloudSync({
           basePayload.current = payload
           revision.current = row.revision
           lastSyncedJson.current = payloadJson
+          clearMigratedLabDrafts(pendingLocalDrafts.current)
+          pendingLocalDrafts.current = []
           setLastSavedAt(row.updated_at)
           setSaveStatus('synced')
           setError(null)
@@ -291,11 +307,11 @@ export function useCloudSync({
         }
     try {
       const row = await withCloudTimeout(createCloudRow(ownerId, initialPayload))
-      if (applyCloudRow(row)) setPhase('ready')
+      if (applyCloudRow(row, useLocalData)) setPhase('ready')
     } catch (initializeError) {
       try {
         const existingRow = await withCloudTimeout(fetchCloudRow(ownerId))
-        if (existingRow && applyCloudRow(existingRow)) {
+        if (existingRow && applyCloudRow(existingRow, useLocalData)) {
           setPhase('ready')
           return
         }

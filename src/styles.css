@@ -4474,7 +4474,6 @@ button.selected-student-chip {
 
 .lab-workspace-toolbar button:hover,
 .lab-teacher-tabs button:hover { border-color: #c4b8e7; color: var(--lab-accent-dark); background: var(--lab-soft); }
-.lab-workspace-toolbar button.shared { border-color: #bdb0e4; color: var(--lab-accent-dark); background: var(--lab-soft); }
 .lab-workspace-toolbar button.danger { width: 34px; padding: 0; color: var(--danger); }
 .lab-workspace-toolbar button.danger:hover { border-color: #e8bcbc; background: var(--danger-soft); }
 
@@ -4616,7 +4615,6 @@ button.selected-student-chip {
 
 .lab-source-options button.active,
 .lab-publish-modes button.active { border-color: #9d8bd1; color: #503b8c; background: var(--lab-soft, #f3efff); box-shadow: inset 0 0 0 1px #c7bce6; }
-.lab-field-help { display: block; margin-top: 7px; color: var(--text-light); font-size: 9px; }
 
 .lab-danger-banner {
   display: flex;
@@ -5321,4 +5319,16 @@ button.selected-student-chip {
 
 .term-schedules li button {
   flex-shrink: 0;
+}
+
+
+.lesson-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 6px;
+}
+
+.lesson-conflict-actions .button {
+  min-height: 30px;
 }

@@ -89,9 +89,11 @@ import {
   minutesToTime,
   timeToMinutes,
   validateLesson,
+  validateLessonIssues,
+  type LessonValidationIssue,
 } from './domain'
-import { loadLocalLabDrafts, loadScheduleSettings, loadState, resetState, saveLocalLabDrafts, saveScheduleSettings, saveState } from './storage'
-import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, DraftVisibility, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleBackup, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeeklyMemo, WeeklyTodo, WeekendMode } from './types'
+import { loadScheduleSettings, loadState, resetState, saveScheduleSettings, saveState } from './storage'
+import type { AppState, AttendanceRecord, AttendanceSession, AttendanceStatus, DraftStudent, FeedbackEntry, HolidayClosure, LearningRecord, LearningRecordType, Lesson, LessonDraft, MakeupRecord, PaymentMethod, PaymentRecord, PaymentStatus, ScheduleBackup, ScheduleDraft, ScheduleSettings, Student, StudentSubject, TeacherId, Transport, Weekday, WeeklyMemo, WeeklyTodo, WeekendMode } from './types'
 import { appendAutomaticBackup, lessonsFromBackup, moveStudentToTeacher } from './scheduleManagement'
 import { useCloudSync, type CloudPhase } from './useCloudSync'
 import { applyWeeklyNotesEdits, fillFromPreviousWeek, todosForWeek, weeklyNotes, type WeeklyNotes } from './weeklyRecords'
@@ -2051,8 +2053,8 @@ function LessonModal({
   teacherId: TeacherId
   transportEnabled: boolean
   onClose: () => void
-  onSave: (lessons: Lesson[]) => void
-  onDelete: (lessonId: string) => void
+  onSave: (lessons: Lesson[], keepOpen?: boolean) => void
+  onDelete: (lessonId: string, keepOpen?: boolean) => void
 }) {
   const sourceLesson = lesson ?? templateLesson
   const initialParticipantIds = sourceLesson?.participants.map((participant) => participant.studentId)
@@ -2078,19 +2080,47 @@ function LessonModal({
   const [weekdayRides, setWeekdayRides] = useState<Partial<Record<Weekday, Record<string, Transport>>>>({
     [initialWeekday]: initialRides,
   })
-  const [errors, setErrors] = useState<string[]>([])
+  const [errors, setErrors] = useState<LessonValidationIssue[]>([])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  if (lesson && confirmingDelete) {
+  const [conflictAction, setConflictAction] = useState<{ lessonId: string; mode: 'edit' | 'delete' } | null>(null)
+  const conflictLesson = conflictAction ? lessons.find(({ id }) => id === conflictAction.lessonId) : undefined
+  const returnToDraft = () => {
+    setConflictAction(null)
+    setErrors([])
+  }
+
+  if (conflictLesson && conflictAction?.mode === 'edit') {
+    return (
+      <LessonModal key={conflictLesson.id} lesson={conflictLesson} students={students} lessons={lessons}
+        teacherId={conflictLesson.teacherId} transportEnabled={transportEnabled}
+        onClose={() => setConflictAction(null)}
+        onSave={(saved, keepOpen) => {
+          onSave(saved, true)
+          if (!keepOpen) returnToDraft()
+        }}
+        onDelete={(lessonId, keepOpen) => {
+          onDelete(lessonId, true)
+          if (!keepOpen) returnToDraft()
+        }}
+      />
+    )
+  }
+
+  const deletionLesson = conflictAction?.mode === 'delete' ? conflictLesson : confirmingDelete ? lesson : undefined
+  if (deletionLesson) {
     return (
       <DeleteConfirmationModal
         kind="lesson"
-        targetName={lesson.label}
-        description={lesson.kind === 'group'
+        targetName={deletionLesson.label}
+        description={deletionLesson.kind === 'group'
           ? '이 그룹 수업은 모든 참여 학생의 시간표에서 함께 삭제됩니다. 이미 저장된 출석 기록은 월별 리포트에 보존됩니다.'
           : '이 수업은 시간표에서 삭제됩니다. 이미 저장된 출석 기록은 월별 리포트에 보존됩니다.'}
-        onBack={() => setConfirmingDelete(false)}
-        onConfirm={() => onDelete(lesson.id)}
+        onBack={() => { setConfirmingDelete(false); setConflictAction(null) }}
+        onConfirm={() => {
+          onDelete(deletionLesson.id, Boolean(conflictLesson))
+          if (conflictLesson) returnToDraft()
+        }}
       />
     )
   }
@@ -2176,22 +2206,22 @@ function LessonModal({
       })
     }
     const nextErrors = selectedWeekdays.length === 0
-      ? ['요일을 한 개 이상 선택해 주세요.']
-      : [...new Set(selectedWeekdays.flatMap((weekday) => {
+      ? [{ message: '요일을 한 개 이상 선택해 주세요.' }]
+      : selectedWeekdays.flatMap((weekday) => {
         const dayName = WEEKDAYS.find((day) => day.value === weekday)?.long ?? ''
         const time = weekdayTimes[weekday] ?? { start, end }
-        return validateLesson({
+        return validateLessonIssues({
           ...sharedDraft,
           weekday,
           startMinute: timeToMinutes(time.start),
           endMinute: timeToMinutes(time.end),
           participants: participantsForWeekday(weekday),
         }, students, lessons, lesson?.id)
-          .map((error) => error.includes('겹칩니다') ? `${dayName}: ${error}` : error)
-      }))]
-    if (!sharedDraft.label) nextErrors.unshift('수업 이름을 입력해 주세요.')
+          .map((issue) => issue.conflictingLessonId ? { ...issue, message: `${dayName}: ${issue.message}` } : issue)
+      })
+    if (!sharedDraft.label) nextErrors.unshift({ message: '수업 이름을 입력해 주세요.' })
     if (nextErrors.length) {
-      setErrors(nextErrors)
+      setErrors([...new Map(nextErrors.map((issue) => [issue.conflictingLessonId ?? issue.message, issue])).values()])
       return
     }
     const createdAt = lesson?.createdAt ?? new Date().toISOString()
@@ -2216,7 +2246,17 @@ function LessonModal({
           {errors.length > 0 && (
             <div className="form-error" role="alert">
               <strong>저장하기 전에 확인해 주세요.</strong>
-              <ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul>
+              <ul>{errors.map(({ message, conflictingLessonId }) => (
+                <li key={conflictingLessonId ?? message}>
+                  {message}
+                  {conflictingLessonId && lessons.some(({ id }) => id === conflictingLessonId) && (
+                    <div className="lesson-conflict-actions">
+                      <button type="button" className="button secondary" onClick={() => setConflictAction({ lessonId: conflictingLessonId, mode: 'edit' })}>기존 수업 수정하기</button>
+                      <button type="button" className="button secondary" onClick={() => setConflictAction({ lessonId: conflictingLessonId, mode: 'delete' })}>기존 수업 삭제하기</button>
+                    </div>
+                  )}
+                </li>
+              ))}</ul>
             </div>
           )}
           <fieldset className="segmented-field">
@@ -3491,12 +3531,11 @@ function findLabConflicts(lessons: Lesson[], students: Student[]): LabConflict[]
   return conflicts
 }
 
-function CreateDraftModal({ teacherNames, onClose, onCreate }: { teacherNames: ScheduleSettings['teacherNames']; onClose: () => void; onCreate: (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId) => void }) {
+function CreateDraftModal({ teacherNames, onClose, onCreate }: { teacherNames: ScheduleSettings['teacherNames']; onClose: () => void; onCreate: (name: string, source: 'all' | 'empty' | TeacherId) => void }) {
   const [name, setName] = useState('새 시간표 시안')
-  const [visibility, setVisibility] = useState<DraftVisibility>('local')
   const [source, setSource] = useState<'all' | 'empty' | TeacherId>('all')
   return <ModalFrame title="새 시간표 시안" eyebrow="실제 시간표와 분리된 연습 공간" onClose={onClose}>
-    <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onCreate(name.trim(), visibility, source) }}>
+    <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onCreate(name.trim(), source) }}>
       <div className="modal-body lab-create-modal">
         <label className="field"><span>시안 이름</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 2027 겨울방학 A안" required /></label>
         <fieldset className="segmented-field"><legend>시작 방식</legend><div className="lab-source-options">
@@ -3504,7 +3543,6 @@ function CreateDraftModal({ teacherNames, onClose, onCreate }: { teacherNames: S
           <button type="button" className={source === 'empty' ? 'active' : ''} onClick={() => setSource('empty')}>빈 시간표</button>
           {TEACHERS.map((teacher) => <button type="button" className={source === teacher.id ? 'active' : ''} key={teacher.id} onClick={() => setSource(teacher.id)}>{teacherNames[teacher.index]}만 복제</button>)}
         </div></fieldset>
-        <fieldset className="segmented-field"><legend>저장 위치</legend><div className="segmented-control"><button type="button" className={visibility === 'local' ? 'active' : ''} onClick={() => setVisibility('local')}>내 기기에만</button><button type="button" className={visibility === 'shared' ? 'active' : ''} onClick={() => setVisibility('shared')}>선생님들과 공유</button></div><small className="lab-field-help">공유 시안만 클라우드를 통해 다른 컴퓨터에 표시됩니다.</small></fieldset>
       </div>
       <footer className="modal-footer"><span className="footer-spacer" /><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary"><Beaker size={15} /> 시안 만들기</button></footer>
     </form>
@@ -3553,7 +3591,7 @@ function PublishDraftModal({ draft, students, conflicts, activeTeacherId, teache
 
 function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames, activeTeacherId, backupLabel, onCreate, onSaveDraft, onDeleteDraft, onPublish, onRestore }: {
   drafts: ScheduleDraft[]; liveLessons: Lesson[]; students: Student[]; settings: ScheduleSettings; teacherNames: ScheduleSettings['teacherNames']; activeTeacherId: TeacherId; backupLabel?: string
-  onCreate: (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId) => ScheduleDraft
+  onCreate: (name: string, source: 'all' | 'empty' | TeacherId) => ScheduleDraft
   onSaveDraft: (draft: ScheduleDraft) => void; onDeleteDraft: (draft: ScheduleDraft) => void
   onPublish: (draft: ScheduleDraft, mode: DraftPublishMode, teacherId: TeacherId, lessonIds: string[]) => boolean; onRestore: () => void
 }) {
@@ -3586,14 +3624,14 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
     const key = (event: KeyboardEvent) => { if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return; const target = event.target; if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return; if (!undoRef.current.length) return; event.preventDefault(); undo() }
     document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key)
   })
-  if (!draft) return <section className="lab-empty-page"><span><Beaker size={38} /></span><h2>시간표 실험실</h2><p>실제 시간표에 영향을 주지 않고 여러 조합을 만들어 비교할 수 있습니다.</p><button type="button" className="button primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> 첫 시안 만들기</button>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}{createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}</section>
+  if (!draft) return <section className="lab-empty-page"><span><Beaker size={38} /></span><h2>시간표 실험실</h2><p>실제 시간표에 영향을 주지 않고 여러 조합을 만들어 비교할 수 있습니다.</p><button type="button" className="button primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> 첫 시안 만들기</button>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}{createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, source) => { const created = onCreate(name, source); setSelectedId(created.id); setCreateOpen(false) }} />}</section>
   const editLesson = draft.lessons.find((lesson) => lesson.id === lessonEditor?.lessonId)
   return <section className="schedule-lab-page">
     <header className="lab-page-header"><div><span className="lab-watermark"><Beaker size={17} /> 연습용 시간표</span><h2>시간표 실험실</h2><p>여기서 변경해도 실제 수업·출석·결제에는 영향을 주지 않습니다.</p></div><div>{backupLabel && <button type="button" className="button secondary" onClick={onRestore}><RotateCcw size={15} /> 직전 실제 시간표 복구</button>}<button type="button" className="button secondary" onClick={() => setCreateOpen(true)}><Plus size={15} /> 새 시안</button><button type="button" className="button primary" onClick={() => setPublishOpen(true)}>실제 시간표로 반영</button></div></header>
     <div className="lab-layout">
-      <aside className="lab-draft-sidebar"><header><strong>저장된 시안</strong><span>{drafts.length}</span></header>{drafts.map((item) => <button type="button" key={item.id} className={item.id === draft.id ? 'active' : ''} onClick={() => { setSelectedId(item.id); undoRef.current = []; setCanUndo(false) }}><span><strong>{item.name}</strong><small>{item.visibility === 'shared' ? '공유 시안' : '이 기기에만'} · {item.lessons.length}개</small></span>{item.id === draft.id && <Check size={14} />}</button>)}</aside>
+      <aside className="lab-draft-sidebar"><header><strong>저장된 시안</strong><span>{drafts.length}</span></header>{drafts.map((item) => <button type="button" key={item.id} className={item.id === draft.id ? 'active' : ''} onClick={() => { setSelectedId(item.id); undoRef.current = []; setCanUndo(false) }}><span><strong>{item.name}</strong><small>수업 {item.lessons.length}개</small></span>{item.id === draft.id && <Check size={14} />}</button>)}</aside>
       <div className="lab-workspace">
-        <div className="lab-workspace-toolbar"><div><input value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} aria-label="시안 이름" /><button type="button" className={draft.visibility === 'shared' ? 'shared' : ''} onClick={() => updateDraft({ visibility: draft.visibility === 'shared' ? 'local' : 'shared' })}>{draft.visibility === 'shared' ? <Cloud size={13} /> : <CloudOff size={13} />}{draft.visibility === 'shared' ? '선생님 공유' : '내 기기 전용'}</button></div><div>{canUndo && <button type="button" onClick={undo} title="Ctrl/⌘+Z"><RotateCcw size={14} /> 되돌리기</button>}<button type="button" onClick={() => setVirtualOpen(true)}><UserPlus size={14} /> 가상 학생</button><button type="button" onClick={() => setLessonEditor({ weekday: getTodayWeekday() })}><Plus size={14} /> 수업 추가</button><button type="button" className="danger" onClick={() => { if (window.confirm(`${draft.name} 시안을 삭제할까요?`)) onDeleteDraft(draft) }}><Trash2 size={14} /></button></div></div>
+        <div className="lab-workspace-toolbar"><div><input value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} aria-label="시안 이름" /></div><div>{canUndo && <button type="button" onClick={undo} title="Ctrl/⌘+Z"><RotateCcw size={14} /> 되돌리기</button>}<button type="button" onClick={() => setVirtualOpen(true)}><UserPlus size={14} /> 가상 학생</button><button type="button" onClick={() => setLessonEditor({ weekday: getTodayWeekday() })}><Plus size={14} /> 수업 추가</button><button type="button" className="danger" onClick={() => { if (window.confirm(`${draft.name} 시안을 삭제할까요?`)) onDeleteDraft(draft) }}><Trash2 size={14} /></button></div></div>
         <div className="lab-teacher-tabs"><button type="button" className={teacherFilter === 'all' ? 'active' : ''} onClick={() => setTeacherFilter('all')}>전체</button>{TEACHERS.map((teacher) => <button type="button" className={teacherFilter === teacher.id ? 'active' : ''} key={teacher.id} onClick={() => setTeacherFilter(teacher.id)}>{teacherNames[teacher.index]}</button>)}</div>
         {conflicts.length > 0 && <div className="lab-conflict-banner"><TriangleAlert size={17} /><span><strong>{conflicts.length}건의 시간 충돌</strong><small>{conflicts[0]?.message}</small></span></div>}
         <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={settings} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
@@ -3603,10 +3641,10 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
         </div>
       </div>
     </div>
-    {createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, visibility, source) => { const created = onCreate(name, visibility, source); setSelectedId(created.id); setCreateOpen(false) }} />}
+    {createOpen && <CreateDraftModal teacherNames={teacherNames} onClose={() => setCreateOpen(false)} onCreate={(name, source) => { const created = onCreate(name, source); setSelectedId(created.id); setCreateOpen(false) }} />}
     {virtualOpen && <VirtualStudentModal onClose={() => setVirtualOpen(false)} onSave={(student) => { updateDraft({ virtualStudents: [...draft.virtualStudents, student] }); setVirtualOpen(false) }} />}
     {publishOpen && <PublishDraftModal draft={draft} students={students} conflicts={conflicts} activeTeacherId={activeTeacherId} teacherNames={teacherNames} onClose={() => setPublishOpen(false)} onPublish={(mode, teacherId, ids) => { if (onPublish(draft, mode, teacherId, ids)) setPublishOpen(false) }} />}
-    {lessonEditor && <LessonModal key={lessonEditor.lessonId ?? `lab-new-${lessonEditor.weekday}`} lesson={editLesson} students={allStudents} lessons={draft.lessons} presetWeekday={lessonEditor.weekday} teacherId={teacherFilter === 'all' ? activeTeacherId : teacherFilter} transportEnabled={settings.transportEnabled} onClose={() => setLessonEditor(null)} onSave={(saved) => { pushUndo(); const savedMap = new Map(saved.map((lesson) => [lesson.id, lesson])); updateDraft({ lessons: [...draft.lessons.map((lesson) => savedMap.get(lesson.id) ?? lesson), ...saved.filter((lesson) => !draft.lessons.some((item) => item.id === lesson.id))] }); setLessonEditor(null) }} onDelete={(lessonId) => { pushUndo(); updateDraft({ lessons: draft.lessons.filter((lesson) => lesson.id !== lessonId) }); setLessonEditor(null) }} />}
+    {lessonEditor && <LessonModal key={lessonEditor.lessonId ?? `lab-new-${lessonEditor.weekday}`} lesson={editLesson} students={allStudents} lessons={draft.lessons} presetWeekday={lessonEditor.weekday} teacherId={teacherFilter === 'all' ? activeTeacherId : teacherFilter} transportEnabled={settings.transportEnabled} onClose={() => setLessonEditor(null)} onSave={(saved, keepOpen) => { pushUndo(); const savedMap = new Map(saved.map((lesson) => [lesson.id, lesson])); updateDraft({ lessons: [...draft.lessons.map((lesson) => savedMap.get(lesson.id) ?? lesson), ...saved.filter((lesson) => !draft.lessons.some((item) => item.id === lesson.id))] }); if (!keepOpen) setLessonEditor(null) }} onDelete={(lessonId, keepOpen) => { pushUndo(); updateDraft({ lessons: draft.lessons.filter((lesson) => lesson.id !== lessonId) }); if (!keepOpen) setLessonEditor(null) }} />}
   </section>
 }
 
@@ -4066,7 +4104,6 @@ export default function App() {
   const [scheduleDisplay, setScheduleDisplay] = useState<ScheduleDisplay>('timeline')
   const [selectedDay, setSelectedDay] = useState<Weekday>(getTodayWeekday())
   const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(() => loadScheduleSettings())
-  const [localLabDrafts, setLocalLabDrafts] = useState<ScheduleDraft[]>(() => loadLocalLabDrafts())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scheduleFullscreen, setScheduleFullscreen] = useState(false)
   const [lessonModal, setLessonModal] = useState<LessonModalState>({ open: false })
@@ -4090,8 +4127,6 @@ export default function App() {
     const error = saveState(appState)
     if (error) setStorageWarning(error)
   }, [appState, storageEnabled])
-
-  useEffect(() => saveLocalLabDrafts(localLabDrafts), [localLabDrafts])
 
   useEffect(() => {
     if (!notice) return
@@ -4147,7 +4182,7 @@ export default function App() {
   }, [])
 
   const sortedStudents = useMemo(() => sortStudents(appState.students, studentSortMode), [appState.students, studentSortMode])
-  const labDrafts = useMemo(() => [...appState.labDrafts, ...localLabDrafts], [appState.labDrafts, localLabDrafts])
+  const labDrafts = appState.labDrafts
   const filteredStudents = sortedStudents.filter((student) => {
     const normalized = studentQuery.trim().toLocaleLowerCase('ko')
     return !normalized || `${student.name} ${student.school} ${student.grade} ${student.guardianName} ${student.guardianPhone}`.toLocaleLowerCase('ko').includes(normalized)
@@ -4228,7 +4263,7 @@ export default function App() {
     })
   }
 
-  const saveLessons = (savedLessons: Lesson[]) => {
+  const saveLessons = (savedLessons: Lesson[], keepOpen = false) => {
     setAppState((current) => {
       const savedById = new Map(savedLessons.map((lesson) => [lesson.id, lesson]))
       const currentIds = new Set(current.lessons.map((lesson) => lesson.id))
@@ -4240,7 +4275,7 @@ export default function App() {
         ],
       }
     })
-    setLessonModal({ open: false })
+    if (!keepOpen) setLessonModal({ open: false })
     setNotice(savedLessons.length > 1
       ? `${savedLessons.length}개 요일에 수업을 저장했습니다.`
       : '수업을 시간표에 저장했습니다.')
@@ -4305,29 +4340,24 @@ export default function App() {
     setNotice('수업을 복사했습니다. 시간표의 붙여넣기 버튼을 눌러 주세요.')
   }
 
-  const createLabDraft = (name: string, visibility: DraftVisibility, source: 'all' | 'empty' | TeacherId): ScheduleDraft => {
+  const createLabDraft = (name: string, source: 'all' | 'empty' | TeacherId): ScheduleDraft => {
     const now = new Date().toISOString()
     const sourceLessons = source === 'empty' ? [] : source === 'all' ? appState.lessons : appState.lessons.filter((lesson) => lesson.teacherId === source)
-    const draft: ScheduleDraft = { id: createId('schedule-draft'), name, visibility, lessons: structuredClone(sourceLessons), virtualStudents: [], virtualMappings: {}, createdAt: now, updatedAt: now }
-    if (visibility === 'local') setLocalLabDrafts((current) => [...current, draft])
-    else setAppState((current) => ({ ...current, labDrafts: [...current.labDrafts, draft] }))
+    const draft: ScheduleDraft = { id: createId('schedule-draft'), name, visibility: 'shared', lessons: structuredClone(sourceLessons), virtualStudents: [], virtualMappings: {}, createdAt: now, updatedAt: now }
+    setAppState((current) => ({ ...current, labDrafts: [...current.labDrafts, draft] }))
     setNotice(`${name} 시안을 만들었습니다.`)
     return draft
   }
 
   const saveLabDraft = (draft: ScheduleDraft) => {
-    if (draft.visibility === 'local') {
-      setLocalLabDrafts((current) => current.some((item) => item.id === draft.id) ? current.map((item) => item.id === draft.id ? draft : item) : [...current, draft])
-      setAppState((current) => ({ ...current, labDrafts: current.labDrafts.filter((item) => item.id !== draft.id) }))
-    } else {
-      setAppState((current) => ({ ...current, labDrafts: current.labDrafts.some((item) => item.id === draft.id) ? current.labDrafts.map((item) => item.id === draft.id ? draft : item) : [...current.labDrafts, draft] }))
-      setLocalLabDrafts((current) => current.filter((item) => item.id !== draft.id))
-    }
+    setAppState((current) => ({
+      ...current,
+      labDrafts: current.labDrafts.map((item) => item.id === draft.id ? draft : item),
+    }))
   }
 
   const deleteLabDraft = (draft: ScheduleDraft) => {
-    if (draft.visibility === 'local') setLocalLabDrafts((current) => current.filter((item) => item.id !== draft.id))
-    else setAppState((current) => ({ ...current, labDrafts: current.labDrafts.filter((item) => item.id !== draft.id) }))
+    setAppState((current) => ({ ...current, labDrafts: current.labDrafts.filter((item) => item.id !== draft.id) }))
     setNotice(`${draft.name} 시안을 삭제했습니다.`)
   }
 
@@ -4430,11 +4460,11 @@ export default function App() {
     setNotice(`${student?.name} 학생을 ${destination} 반으로 옮겼습니다.`)
   }
 
-  const deleteLesson = (lessonId: string) => {
+  const deleteLesson = (lessonId: string, keepOpen = false) => {
     setAppState((current) => ({ ...current, lessons: current.lessons.filter((lesson) => lesson.id !== lessonId) }))
     lessonMoveHistoryRef.current = lessonMoveHistoryRef.current.filter((lesson) => lesson.id !== lessonId)
     setCanUndoLessonMove(lessonMoveHistoryRef.current.length > 0)
-    setLessonModal({ open: false })
+    if (!keepOpen) setLessonModal({ open: false })
     setNotice('수업을 삭제했습니다.')
   }
 

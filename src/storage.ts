@@ -76,21 +76,38 @@ export function loadLocalLabDrafts(): ScheduleDraft[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(LOCAL_LAB_STORAGE_KEY) ?? '[]')
     if (!Array.isArray(parsed)) return []
-    return parsed.filter((draft): draft is ScheduleDraft => Boolean(
-      draft && typeof draft === 'object' && typeof draft.id === 'string' && typeof draft.name === 'string'
-      && draft.visibility === 'local' && Array.isArray(draft.lessons) && Array.isArray(draft.virtualStudents),
-    )).map((draft) => ({ ...draft, virtualMappings: draft.virtualMappings && typeof draft.virtualMappings === 'object' ? draft.virtualMappings : {} }))
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object' || item.visibility !== 'local') return []
+      const draft: ScheduleDraft = { ...item, virtualMappings: item.virtualMappings ?? {} }
+      return validateState({ schemaVersion: 1, students: [], lessons: [], labDrafts: [draft] }) ? [draft] : []
+    })
   } catch {
     return []
   }
 }
 
-export function saveLocalLabDrafts(drafts: ScheduleDraft[]): void {
+export function clearMigratedLabDrafts(drafts: ScheduleDraft[]): void {
+  if (drafts.length === 0) return
   try {
-    localStorage.setItem(LOCAL_LAB_STORAGE_KEY, JSON.stringify(drafts.filter((draft) => draft.visibility === 'local')))
+    const parsed: unknown = JSON.parse(localStorage.getItem(LOCAL_LAB_STORAGE_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return
+    const remaining = parsed.filter((item) => !drafts.some((draft) => (
+      item?.id === draft.id && item?.updatedAt === draft.updatedAt && item?.visibility === 'local'
+    )))
+    if (remaining.length === 0) localStorage.removeItem(LOCAL_LAB_STORAGE_KEY)
+    else if (remaining.length !== parsed.length) localStorage.setItem(LOCAL_LAB_STORAGE_KEY, JSON.stringify(remaining))
   } catch {
-    // The shared timetable remains usable if local draft storage is unavailable.
+    // A later sign-in can retry the migration using the remaining local copy.
   }
+}
+
+export function mergeLocalLabDrafts(shared: ScheduleDraft[], local: ScheduleDraft[]): ScheduleDraft[] {
+  const merged = new Map(shared.map((draft) => [draft.id, draft]))
+  for (const draft of local) {
+    const existing = merged.get(draft.id)
+    if (!existing || draft.updatedAt > existing.updatedAt) merged.set(draft.id, { ...draft, visibility: 'shared' })
+  }
+  return [...merged.values()]
 }
 
 export function parseAppState(value: unknown): AppState | null {

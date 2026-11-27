@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { DEMO_STATE } from './demoData'
-import { DEFAULT_SCHEDULE_SETTINGS, parseAppState, parseScheduleSettings } from './storage'
+import { DEFAULT_SCHEDULE_SETTINGS, mergeLocalLabDrafts, parseAppState, parseScheduleSettings } from './storage'
 
 describe('저장 자료 호환성', () => {
+  it('moves device-only drafts to shared storage without replacing newer shared versions', () => {
+    const original = {
+      id: 'draft-a', name: '기기 시안', visibility: 'local' as const,
+      lessons: DEMO_STATE.lessons, virtualStudents: [], virtualMappings: {},
+      createdAt: '2026-11-25T00:00:00Z', updatedAt: '2026-11-25T00:00:00Z',
+    }
+    const shared = { ...original, name: '다른 기기의 수정', visibility: 'shared' as const, updatedAt: '2026-11-26T00:00:00Z' }
+    const second = { ...original, id: 'draft-b' }
+    const merged = mergeLocalLabDrafts([shared], [original, second, second])
+    expect(merged).toEqual([shared, { ...second, visibility: 'shared' }])
+    expect(parseAppState({ ...DEMO_STATE, labDrafts: merged })?.labDrafts).toHaveLength(2)
+  })
+
   it('출석 기능 추가 전 자료에는 빈 출석 기록을 채운다', () => {
     const {
       attendanceRecords: _attendanceRecords,

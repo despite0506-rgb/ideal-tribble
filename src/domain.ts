@@ -174,12 +174,14 @@ export function intervalsOverlap(
   return firstStart < secondEnd && secondStart < firstEnd
 }
 
-export function validateLesson(
+export type LessonValidationIssue = { message: string; conflictingLessonId?: string }
+
+export function validateLessonIssues(
   draft: LessonDraft,
   students: Student[],
   lessons: Lesson[],
   editingId?: string,
-): string[] {
+): LessonValidationIssue[] {
   const errors: string[] = []
   const ids = draft.participants.map((participant) => participant.studentId)
   const hasValidParticipantCount = draft.kind === 'group' ? ids.length >= 2 : ids.length === 1
@@ -211,7 +213,7 @@ export function validateLesson(
   }
 
   if (errors.length === 0) {
-    const conflict = lessons.find((lesson) => {
+    const conflicts = lessons.filter((lesson) => {
       if (lesson.id === editingId || lesson.weekday !== draft.weekday) return false
       const sharesStudent = lesson.participants.some((participant) => ids.includes(participant.studentId))
       return sharesStudent && intervalsOverlap(
@@ -221,16 +223,24 @@ export function validateLesson(
         draft.endMinute,
       )
     })
-    if (conflict) {
+    return conflicts.map((conflict) => {
       const names = conflict.participants
         .map((participant) => students.find((student) => student.id === participant.studentId)?.name)
         .filter(Boolean)
         .join(' · ')
-      errors.push(`${minutesToTime(conflict.startMinute)}–${minutesToTime(conflict.endMinute)} ${names} 수업과 겹칩니다.`)
-    }
+      return {
+        message: `${minutesToTime(conflict.startMinute)}–${minutesToTime(conflict.endMinute)} ${names} 수업과 겹칩니다.`,
+        conflictingLessonId: conflict.id,
+      }
+    })
   }
 
-  return errors
+  return errors.map((message) => ({ message }))
+}
+
+export function validateLesson(draft: LessonDraft, students: Student[], lessons: Lesson[], editingId?: string): string[] {
+  const issues = validateLessonIssues(draft, students, lessons, editingId)
+  return (issues[0]?.conflictingLessonId ? issues.slice(0, 1) : issues).map(({ message }) => message)
 }
 
 export function lessonsForStudent(lessons: Lesson[], studentId: string): Lesson[] {
