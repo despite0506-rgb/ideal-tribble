@@ -212,6 +212,7 @@ export type ScheduleSettings = {
   transportEnabled: boolean
   showStudentAvatars: boolean
   showStudentNames: boolean
+  studentGradeColors?: Record<string, string>
   density: 'compact' | 'comfortable'
 }
 

@@ -30,6 +30,7 @@ import {
   Minimize2,
   MessageSquare,
   Pencil,
+  Palette,
   Plus,
   RotateCcw,
   Save,
@@ -277,11 +278,11 @@ function sortStudents(students: Student[], mode: StudentSortMode): Student[] {
   return [...students].sort((a, b) => a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' }))
 }
 
-function Avatar({ student, size = 'md' }: { student: Student; size?: 'sm' | 'md' | 'lg' }) {
+function Avatar({ student, size = 'md', foreground }: { student: Student; size?: 'sm' | 'md' | 'lg'; foreground?: string }) {
   return (
     <span
       className={`avatar avatar-${size}`}
-      style={{ '--avatar-color': student.color } as CSSProperties}
+      style={{ '--avatar-color': student.color, color: foreground } as CSSProperties}
       aria-hidden="true"
     >
       {initials(student.name)}
@@ -647,18 +648,65 @@ const STUDENT_GRADE_COLORS: Record<string, string> = {
   고1: '#def3ff', 고2: '#bce8fb', 고3: '#98d6f5',
 }
 
-function studentGradeColor(grade: string): string {
-  return STUDENT_GRADE_COLORS[grade] ?? '#e8edf0'
+function studentGradeColor(grade: string, colors?: Record<string, string>): string {
+  if (!Object.hasOwn(STUDENT_GRADE_COLORS, grade)) return '#e8edf0'
+  return colors?.[grade] ?? STUDENT_GRADE_COLORS[grade]!
 }
 
-function RosterGrade({ grade }: { grade: string }) {
-  return <span className="roster-grade" style={{ backgroundColor: studentGradeColor(grade) }}>({grade})</span>
+function gradeTextColor(background: string): string {
+  const luminance = [1, 3, 5].reduce((total, offset, index) => {
+    const channel = Number.parseInt(background.slice(offset, offset + 2), 16) / 255
+    const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    return total + linear * [0.2126, 0.7152, 0.0722][index]!
+  }, 0)
+  return luminance > 0.179 ? '#111' : '#fff'
+}
+
+function RosterGrade({ grade, colors }: { grade: string; colors: Record<string, string> }) {
+  const backgroundColor = studentGradeColor(grade, colors)
+  return <span className="roster-grade" style={{ backgroundColor, color: gradeTextColor(backgroundColor) }}>({grade})</span>
+}
+
+function StudentGradeColorsModal({ colors, onClose, onSave }: {
+  colors: Record<string, string>
+  onClose: () => void
+  onSave: (changes: Record<string, string | null>) => void
+}) {
+  const [initial] = useState(colors)
+  const [draft, setDraft] = useState(initial)
+  return (
+    <ModalFrame title="학년별 색상" eyebrow="학생 관리" onClose={onClose}>
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        const changes = Object.entries(STUDENT_GRADE_COLORS)
+          .filter(([grade, defaultColor]) => (draft[grade] ?? defaultColor) !== (initial[grade] ?? defaultColor))
+          .map(([grade, defaultColor]) => [grade, draft[grade] === defaultColor ? null : draft[grade] ?? null])
+        onSave(Object.fromEntries(changes))
+      }}>
+        <div className="modal-body student-grade-color-options">
+          {Object.keys(STUDENT_GRADE_COLORS).map((grade) => (
+            <label key={grade}>
+              {grade}
+              <input type="color" aria-label={`${grade} 색상`} value={studentGradeColor(grade, draft)}
+                onChange={(event) => setDraft((current) => ({ ...current, [grade]: event.target.value }))} />
+            </label>
+          ))}
+        </div>
+        <footer className="modal-footer">
+          <button type="button" className="button secondary" onClick={() => setDraft({})}>기본 색상으로</button>
+          <span className="footer-spacer" />
+          <button type="button" className="button secondary" onClick={onClose}>취소</button>
+          <button type="submit" className="button primary">색상 저장</button>
+        </footer>
+      </form>
+    </ModalFrame>
+  )
 }
 
 function StudentQuickLinks({
   students,
   title = '학년별 학생',
-  colorByGrade = false,
+  gradeColors,
   assignedStudentIds,
   teacherNames,
   highlightedTeachers,
@@ -667,7 +715,7 @@ function StudentQuickLinks({
 }: {
   students: Student[]
   title?: string
-  colorByGrade?: boolean
+  gradeColors?: Record<string, string>
   assignedStudentIds: Set<string>
   teacherNames: ScheduleSettings['teacherNames']
   highlightedTeachers: ReadonlySet<TeacherId>
@@ -690,7 +738,7 @@ function StudentQuickLinks({
   }
 
   return (
-    <section className={`student-quick-panel${colorByGrade ? ' student-grade-colors' : ''}`} aria-labelledby="student-quick-title">
+    <section className={`student-quick-panel${gradeColors ? ' student-grade-colors' : ''}`} aria-labelledby="student-quick-title">
       <header>
         <div><span className="eyebrow">STUDENT PAGES</span><h2 id="student-quick-title">{title}</h2></div>
         <div className="student-quick-actions">
@@ -718,7 +766,10 @@ function StudentQuickLinks({
                   <button
                     type="button"
                     className={`student-quick-button${assignedStudentIds.has(student.id) ? ' is-assigned' : ' is-unassigned'}`}
-                    style={{ '--student-color': colorByGrade ? studentGradeColor(group.label) : student.color } as CSSProperties}
+                    style={{
+                      '--student-color': gradeColors ? studentGradeColor(group.label, gradeColors) : student.color,
+                      color: gradeColors ? gradeTextColor(studentGradeColor(group.label, gradeColors)) : undefined,
+                    } as CSSProperties}
                     key={student.id}
                     onClick={() => onOpenStudent(student.id)}
                     aria-label={`${group.label} ${student.name}, 학생 페이지 열기`}
@@ -735,9 +786,10 @@ function StudentQuickLinks({
   )
 }
 
-function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, onOpenStudent, onMove }: {
+function StudentsByTeacher({ students, koreanStudents, gradeColors, lessons, teacherNames, onOpenStudent, onMove }: {
   students: Student[]
   koreanStudents: Student[]
+  gradeColors: Record<string, string>
   lessons: Lesson[]
   teacherNames: ScheduleSettings['teacherNames']
   onOpenStudent: (id: string) => void
@@ -825,7 +877,7 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
                                 if (event.detail === 0 || !suppressClick.current) onOpenStudent(student.id)
                                 suppressClick.current = false
                               }}>
-                              <RosterGrade grade={label} /><span>{student.name}</span>
+                              <RosterGrade grade={label} colors={gradeColors} /><span>{student.name}</span>
                             </button>
                           </li>
                         )
@@ -834,7 +886,7 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
                   ))}
                 </div>
               )}
-              {id === koreanTeacherId && <KoreanStudentRoster students={koreanStudents} onOpenStudent={onOpenStudent} />}
+              {id === koreanTeacherId && <KoreanStudentRoster students={koreanStudents} gradeColors={gradeColors} onOpenStudent={onOpenStudent} />}
             </section>
           )
         })}
@@ -850,8 +902,9 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
   )
 }
 
-function KoreanStudentRoster({ students, onOpenStudent }: {
+function KoreanStudentRoster({ students, gradeColors, onOpenStudent }: {
   students: Student[]
+  gradeColors: Record<string, string>
   onOpenStudent: (studentId: string) => void
 }) {
   return (
@@ -864,7 +917,7 @@ function KoreanStudentRoster({ students, onOpenStudent }: {
               {classmates.map((student) => (
                 <li key={student.id}>
                   <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
-                    <RosterGrade grade={label} /><span>{student.name}</span>
+                    <RosterGrade grade={label} colors={gradeColors} /><span>{student.name}</span>
                   </button>
                 </li>
               ))}
@@ -4076,6 +4129,7 @@ export default function App() {
   const [studentModal, setStudentModal] = useState<StudentModalState>({ open: false })
   const [groupMembersModalId, setGroupMembersModalId] = useState<string | null>(null)
   const [bulkStudentModalOpen, setBulkStudentModalOpen] = useState(false)
+  const [gradeColorsOpen, setGradeColorsOpen] = useState(false)
   const [studentSubjectsModalOpen, setStudentSubjectsModalOpen] = useState(false)
   const [nameSettingsOpen, setNameSettingsOpen] = useState(false)
   const [operationsWeekStart, setOperationsWeekStart] = useState(() => weekStartValue())
@@ -4585,6 +4639,19 @@ export default function App() {
     setAppState((current) => ({ ...current, students: [...current.students, ...students] }))
     setBulkStudentModalOpen(false)
     setNotice(`${students.length}명의 학생을 등록했습니다.`)
+  }
+
+  const saveGradeColors = (changes: Record<string, string | null>) => {
+    setScheduleSettings((current) => {
+      const studentGradeColors = { ...current.studentGradeColors }
+      for (const [grade, color] of Object.entries(changes)) {
+        if (color === null) delete studentGradeColors[grade]
+        else studentGradeColors[grade] = color
+      }
+      return { ...current, studentGradeColors }
+    })
+    setGradeColorsOpen(false)
+    if (Object.keys(changes).length > 0) setNotice('학년별 색상을 저장했습니다.')
   }
 
   const saveStudentSubjects = (students: Student[]) => {
@@ -5190,6 +5257,7 @@ export default function App() {
               <div className="students-toolbar-actions">
                 <span>{pageStudents.length}명의 공유 학생</span>
                 <StudentSortControl mode={studentSortMode} onChange={setStudentSortMode} />
+                <button type="button" className="button secondary" onClick={() => setGradeColorsOpen(true)}><Palette size={15} /> 학년별 색상</button>
                 <button type="button" className="button secondary" onClick={() => setStudentSubjectsModalOpen(true)}><BookOpen size={15} /> 과목 일괄설정</button>
               </div>
             </div>
@@ -5200,7 +5268,7 @@ export default function App() {
             {studentGrouping === 'grade'
               ? <StudentQuickLinks
                   title="학년별 수학 학생"
-                  colorByGrade
+                  gradeColors={scheduleSettings.studentGradeColors ?? {}}
                   students={mathPageStudents}
                   assignedStudentIds={highlightedStudentIds}
                   teacherNames={scheduleSettings.teacherNames}
@@ -5208,17 +5276,18 @@ export default function App() {
                   onToggleTeacher={toggleTeacherHighlight}
                   onOpenStudent={showStudentDetail}
                 />
-              : <StudentsByTeacher students={mathPageStudents} koreanStudents={koreanPageStudents} lessons={mathLessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
+              : <StudentsByTeacher gradeColors={scheduleSettings.studentGradeColors ?? {}} students={mathPageStudents} koreanStudents={koreanPageStudents} lessons={mathLessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
             ) : mathPageStudents.length > 0 && (
               <div className="student-card-grid">
                 {mathPageStudents.map((student) => {
+                  const gradeColor = studentGradeColor(getStudentGradeGroup(student), scheduleSettings.studentGradeColors)
                   const studentLessons = lessonsForStudent(appState.lessons, student.id)
                   return (
                     <article className="student-card" key={student.id}>
                       <header>
-                        <Avatar student={{ ...student, color: studentGradeColor(getStudentGradeGroup(student)) }} size="lg" />
+                        <Avatar student={{ ...student, color: gradeColor }} size="lg" foreground={gradeTextColor(gradeColor)} />
                         <div><div className="student-card-name"><h2>{student.name}</h2><StudentSubjectTag student={student} lessons={appState.lessons} /></div><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p></div>
                         <button type="button" className="icon-button" onClick={() => setStudentModal({ open: true, studentId: student.id })} aria-label={`${student.name} 정보 수정`}><Pencil size={17} /></button>
                       </header>
@@ -5347,6 +5416,8 @@ export default function App() {
           onSave={saveBulkStudents}
         />
       )}
+      {gradeColorsOpen && <StudentGradeColorsModal colors={scheduleSettings.studentGradeColors ?? {}}
+        onClose={() => setGradeColorsOpen(false)} onSave={saveGradeColors} />}
       {studentSubjectsModalOpen && (
         <StudentSubjectsModal
           students={appState.students}

@@ -16,6 +16,7 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   transportEnabled: true,
   showStudentAvatars: true,
   showStudentNames: true,
+  studentGradeColors: {},
   density: 'comfortable',
 }
 
@@ -160,6 +161,10 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     && Number(settings.endMinute) <= 1440
     && Number(settings.startMinute) < Number(settings.endMinute)
   if (!validWeekendMode || !validTimes) return null
+  const gradeColors = settings.studentGradeColors
+  const studentGradeColors = gradeColors && typeof gradeColors === 'object' && !Array.isArray(gradeColors)
+    ? Object.fromEntries(Object.entries(gradeColors).filter(([grade, color]) => /^(초[1-6]|[중고][1-3])$/.test(grade) && typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)))
+    : {}
   return {
     academyName: typeof settings.academyName === 'string' && settings.academyName.trim()
       ? settings.academyName.trim()
@@ -178,6 +183,7 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     transportEnabled: typeof settings.transportEnabled === 'boolean' ? settings.transportEnabled : true,
     showStudentAvatars: typeof settings.showStudentAvatars === 'boolean' ? settings.showStudentAvatars : true,
     showStudentNames: typeof settings.showStudentNames === 'boolean' ? settings.showStudentNames : true,
+    studentGradeColors,
     density: settings.density === 'compact' ? 'compact' : 'comfortable',
   }
 }
