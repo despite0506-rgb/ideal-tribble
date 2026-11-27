@@ -122,7 +122,7 @@ type LessonTimeValue = {
   end: string
 }
 
-const PIXELS_PER_MINUTE = 1.6
+const PIXELS_PER_MINUTE = 1.4
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
 const SIDEBAR_MIN_WIDTH = 190
@@ -326,14 +326,12 @@ function LessonCardContent({
   lesson,
   students,
   transportEnabled,
-  showStudentAvatars,
   showStudentNames,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
   transportEnabled: boolean
-  showStudentAvatars: boolean
   showStudentNames: boolean
   dense?: boolean
 }) {
@@ -352,17 +350,11 @@ function LessonCardContent({
           {lesson.kind === 'group' && <span className="kind-badge" aria-label={`${lesson.participants.length}명`}>{lesson.participants.length}</span>}
         </span>
       </div>
-      <strong className="lesson-title">{lesson.label || '수업'}</strong>
-      {(showStudentAvatars || showStudentNames) && (
-        <div className="lesson-people">
-          {showStudentAvatars && (
-            <span className="mini-avatars" aria-hidden="true">
-              {participants.map(({ student }) => <Avatar key={student.id} student={student} size="sm" />)}
-            </span>
-          )}
-          {showStudentNames && <span>{participants.map(({ student }) => student.name).join(' · ')}</span>}
-        </div>
-      )}
+      <strong className="lesson-title">
+        {showStudentNames && participants.length > 0
+          ? participants.map(({ student }) => student.name).join(' · ')
+          : lesson.label || '수업'}
+      </strong>
       {transportEnabled && (
         <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
           {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
@@ -484,18 +476,19 @@ function Timeline({
                   const lessonColor = getLessonColor(lesson, students)
                   const clippedStart = Math.max(lesson.startMinute, start)
                   const clippedEnd = Math.min(lesson.endMinute, end)
+                  const cardHeight = Math.max((clippedEnd - clippedStart) * pixelsPerMinute - 4, settings.density === 'compact' ? 28 : 34)
                   const cardStyle = {
-                    top: (clippedStart - start) * pixelsPerMinute + 3,
-                    height: Math.max((clippedEnd - clippedStart) * pixelsPerMinute - 6, settings.density === 'compact' ? 28 : 34),
-                    left: `calc(${lesson.column * width}% + 3px)`,
-                    width: `calc(${width}% - 6px)`,
+                    top: (clippedStart - start) * pixelsPerMinute + 2,
+                    height: cardHeight,
+                    left: `calc(${lesson.column * width}% + 2px)`,
+                    width: `calc(${width}% - 4px)`,
                     '--lesson-color': lessonColor,
                     '--lesson-color-2': lessonColor,
                   } as CSSProperties
                   return (
                     <button
                       type="button"
-                      className={`lesson-card ${lesson.kind}${selectedStudentId !== 'all' ? ' is-focused' : ''}`}
+                      className={`lesson-card ${lesson.kind}${cardHeight < 48 ? ' is-short' : ''}${selectedStudentId !== 'all' ? ' is-focused' : ''}`}
                       style={cardStyle}
                       onClick={() => onOpenLesson(lesson.id)}
                       key={lesson.id}
@@ -507,7 +500,6 @@ function Timeline({
                         lesson={lesson}
                         students={students}
                         transportEnabled={settings.transportEnabled}
-                        showStudentAvatars={settings.showStudentAvatars}
                         showStudentNames={settings.showStudentNames}
                         dense={(lesson.endMinute - lesson.startMinute) < 45}
                       />
@@ -531,7 +523,6 @@ function LessonList({
   selectedDay,
   onSelectDay,
   transportEnabled,
-  showStudentAvatars,
   showStudentNames,
   mobileOnly = false,
   closures,
@@ -543,7 +534,6 @@ function LessonList({
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   transportEnabled: boolean
-  showStudentAvatars: boolean
   showStudentNames: boolean
   mobileOnly?: boolean
   closures: HolidayClosure[]
@@ -610,7 +600,6 @@ function LessonList({
                       lesson={lesson}
                       students={students}
                       transportEnabled={transportEnabled}
-                      showStudentAvatars={showStudentAvatars}
                       showStudentNames={showStudentNames}
                     />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
@@ -2286,7 +2275,7 @@ function LessonModal({
               <button
                 type="button"
                 className={`lesson-color-auto${color === '' ? ' selected' : ''}`}
-                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students, label) } as CSSProperties}
+                style={{ '--swatch-color': getDefaultLessonColor(participantIds, students) } as CSSProperties}
                 onClick={() => setColor('')}
                 aria-pressed={color === ''}
               >
@@ -2306,14 +2295,14 @@ function LessonModal({
               <label className={`lesson-custom-color${color && !LESSON_COLORS.includes(color as typeof LESSON_COLORS[number]) ? ' selected' : ''}`}>
                 <input
                   type="color"
-                  value={color || getDefaultLessonColor(participantIds, students, label)}
+                  value={color || getDefaultLessonColor(participantIds, students)}
                   onChange={(event) => setColor(event.target.value)}
                   aria-label="직접 수업 색상 선택"
                 />
                 직접 선택
               </label>
             </div>
-            <p><span className="elementary" />초등 분홍 <span className="middle" />중등 하늘 <span className="high" />고등 노랑 · 국어는 같은 계열에서 더 선명하게</p>
+            <p><span className="elementary" />초등 분홍·빨강 <span className="middle" />중등 연두·초록 <span className="high" />고등 하늘 · 학년이 높을수록 진해져요</p>
           </fieldset>
           <fieldset className="weekday-picker">
             <legend>
@@ -5152,11 +5141,6 @@ export default function App() {
                   </div>
                   <div className="lesson-content-settings" aria-label="수업 카드 표시 설정">
                     <Toggle
-                      label="학생 아이콘"
-                      checked={scheduleSettings.showStudentAvatars}
-                      onChange={(showStudentAvatars) => setScheduleSettings((current) => ({ ...current, showStudentAvatars }))}
-                    />
-                    <Toggle
                       label="학생 이름"
                       checked={scheduleSettings.showStudentNames}
                       onChange={(showStudentNames) => setScheduleSettings((current) => ({ ...current, showStudentNames }))}
@@ -5184,10 +5168,10 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} closures={appState.holidayClosures} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} onMoveLesson={moveLesson} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
                 </>
               )}
             </section>

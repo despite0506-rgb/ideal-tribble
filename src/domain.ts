@@ -53,21 +53,15 @@ export const STUDENT_COLORS = [
 ]
 
 export const DEFAULT_LESSON_COLORS = {
-  elementary: '#e78fb1',
-  middle: '#72b9e6',
-  high: '#e3b84f',
-} as const
-
-export const DEFAULT_KOREAN_LESSON_COLORS = {
-  elementary: '#ef6fa3',
-  middle: '#45abe5',
-  high: '#e8aa25',
+  elementary: ['#f9dbe6', '#f6c1d5', '#f3a8c2', '#ef8caa', '#eb6f91', '#e75772'],
+  middle: ['#cde48b', '#a6d86f', '#74c486'],
+  high: ['#c4eaff', '#9ad8f7', '#6fc3ef'],
 } as const
 
 export const LESSON_COLORS = [
-  DEFAULT_LESSON_COLORS.elementary,
-  DEFAULT_LESSON_COLORS.middle,
-  DEFAULT_LESSON_COLORS.high,
+  DEFAULT_LESSON_COLORS.elementary[3],
+  DEFAULT_LESSON_COLORS.middle[1],
+  DEFAULT_LESSON_COLORS.high[1],
   '#78b89a',
   '#9b87d3',
   '#e58b69',
@@ -431,27 +425,23 @@ export function getDefaultTuition(student: Student, lessons: Lesson[]): number {
   return getTuitionBreakdown(student, lessons).reduce((total, item) => total + item.amount, 0)
 }
 
-export function getDefaultLessonColor(studentIds: string[], students: Student[], lessonLabel = ''): string {
-  const highestLevel = studentIds.reduce((highest, studentId) => {
-    const student = students.find((item) => item.id === studentId)
-    if (!student) return highest
-    const gradeGroup = getStudentGradeGroup(student)
-    const level = gradeGroup.startsWith('고') ? 3 : gradeGroup.startsWith('중') ? 2 : 1
-    return Math.max(highest, level)
-  }, 1)
-  const colors = lessonLabel.includes('국어') ? DEFAULT_KOREAN_LESSON_COLORS : DEFAULT_LESSON_COLORS
-  if (highestLevel === 3) return colors.high
-  if (highestLevel === 2) return colors.middle
-  return colors.elementary
+export function getDefaultLessonColor(studentIds: string[], students: Student[]): string {
+  const participants = new Set(studentIds)
+  let highestGrade = 0
+  for (const student of students) {
+    if (!participants.has(student.id)) continue
+    const grade = gradeGroupSortValue(getStudentGradeGroup(student))
+    if (grade < 900) highestGrade = Math.max(highestGrade, grade)
+  }
+  if (highestGrade > 200) return DEFAULT_LESSON_COLORS.high[Math.min(highestGrade - 201, 2)]!
+  if (highestGrade > 100) return DEFAULT_LESSON_COLORS.middle[Math.min(highestGrade - 101, 2)]!
+  if (highestGrade > 0) return DEFAULT_LESSON_COLORS.elementary[highestGrade - 1]!
+  return '#c8d5d0'
 }
 
 export function getLessonColor(lesson: Pick<Lesson, 'color' | 'colorMode' | 'label' | 'participants'>, students: Student[]): string {
   if (lesson.color && lesson.colorMode !== 'auto') return lesson.color
-  return getDefaultLessonColor(
-    lesson.participants.map((participant) => participant.studentId),
-    students,
-    lesson.label,
-  )
+  return getDefaultLessonColor(lesson.participants.map(({ studentId }) => studentId), students)
 }
 
 export function gradeGroupSortValue(label: string): number {
