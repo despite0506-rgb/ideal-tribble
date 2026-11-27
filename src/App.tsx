@@ -337,11 +337,13 @@ function LessonCardContent({
   lesson,
   students,
   transportEnabled,
+  gradeColors,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
   transportEnabled: boolean
+  gradeColors?: ScheduleSettings['studentGradeColors']
   dense?: boolean
 }) {
   const participants = lesson.participants
@@ -364,7 +366,10 @@ function LessonCardContent({
       {!titleRepeatsName && <strong className="lesson-title">{lesson.label || '수업'}</strong>}
       {participants.length > 0 && (
         <div className="lesson-people">
-          {participants.map(({ student }) => <span key={student.id} title={student.name}>{studentGivenName(student.name)}</span>)}
+          {participants.map(({ student }) => <span key={student.id} title={student.name}
+            style={{ '--name-grade-color': studentGradeColor(getStudentGradeGroup(student), gradeColors) } as CSSProperties}>
+            {studentGivenName(student.name)}
+          </span>)}
         </div>
       )}
       {transportEnabled && (
@@ -511,6 +516,7 @@ function Timeline({
                         lesson={lesson}
                         students={students}
                         transportEnabled={settings.transportEnabled}
+                        gradeColors={settings.studentGradeColors}
                         dense={(lesson.endMinute - lesson.startMinute) < 45}
                       />
                     </button>
@@ -533,6 +539,7 @@ function LessonList({
   selectedDay,
   onSelectDay,
   transportEnabled,
+  gradeColors,
   mobileOnly = false,
   closures,
 }: {
@@ -543,6 +550,7 @@ function LessonList({
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   transportEnabled: boolean
+  gradeColors?: ScheduleSettings['studentGradeColors']
   mobileOnly?: boolean
   closures: HolidayClosure[]
 }) {
@@ -608,6 +616,7 @@ function LessonList({
                       lesson={lesson}
                       students={students}
                       transportEnabled={transportEnabled}
+                      gradeColors={gradeColors}
                     />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
                   </button>
@@ -5182,10 +5191,10 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} closures={appState.holidayClosures} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} onMoveLesson={moveLesson} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} closures={appState.holidayClosures} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} gradeColors={scheduleSettings.studentGradeColors} closures={appState.holidayClosures} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} closures={appState.holidayClosures} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} gradeColors={scheduleSettings.studentGradeColors} closures={appState.holidayClosures} />
                 </>
               )}
             </section>
