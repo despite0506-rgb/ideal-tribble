@@ -213,6 +213,7 @@ export type ScheduleSettings = {
   showStudentAvatars: boolean
   showStudentNames: boolean
   studentGradeColors?: Record<string, string>
+  labDisplayRange?: [startMinute: number, endMinute: number]
   density: 'compact' | 'comfortable'
 }
 

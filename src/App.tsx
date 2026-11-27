@@ -124,6 +124,7 @@ type LessonTimeValue = {
 
 const PIXELS_PER_MINUTE = 1.6
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
+const LAB_DISPLAY_TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => index * 30)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
 const SIDEBAR_MIN_WIDTH = 190
 const SIDEBAR_MAX_WIDTH = 360
@@ -3607,8 +3608,9 @@ function PublishDraftModal({ draft, students, conflicts, activeTeacherId, teache
   </ModalFrame>
 }
 
-function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames, activeTeacherId, backupLabel, onCreate, onSaveDraft, onDeleteDraft, onPublish, onRestore }: {
+function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames, activeTeacherId, backupLabel, onChangeDisplayRange, onCreate, onSaveDraft, onDeleteDraft, onPublish, onRestore }: {
   drafts: ScheduleDraft[]; liveLessons: Lesson[]; students: Student[]; settings: ScheduleSettings; teacherNames: ScheduleSettings['teacherNames']; activeTeacherId: TeacherId; backupLabel?: string
+  onChangeDisplayRange: (range: NonNullable<ScheduleSettings['labDisplayRange']>) => void
   onCreate: (name: string, source: 'all' | 'empty' | TeacherId) => ScheduleDraft
   onSaveDraft: (draft: ScheduleDraft) => void; onDeleteDraft: (draft: ScheduleDraft) => void
   onPublish: (draft: ScheduleDraft, mode: DraftPublishMode, teacherId: TeacherId, lessonIds: string[]) => boolean; onRestore: () => void
@@ -3629,6 +3631,9 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
   const conflicts = draft ? findLabConflicts(draft.lessons, allStudents) : []
   const conflictIds = new Set(conflicts.flatMap((conflict) => [conflict.firstId, conflict.secondId]))
   const shownLessons = draft?.lessons.filter((lesson) => teacherFilter === 'all' || lesson.teacherId === teacherFilter) ?? []
+  const [displayStart, displayEnd] = settings.labDisplayRange ?? [settings.startMinute, settings.endMinute]
+  const displayOptions = [...new Set([...LAB_DISPLAY_TIME_OPTIONS, displayStart, displayEnd])].sort((a, b) => a - b)
+  const hiddenByTime = shownLessons.filter((lesson) => lesson.endMinute <= displayStart || lesson.startMinute >= displayEnd).length
   const comparedLessons = compareId === 'live' ? liveLessons : drafts.find((item) => item.id === compareId)?.lessons ?? []
   const compareMap = new Map(comparedLessons.map((lesson) => [lesson.id, lesson]))
   const draftMap = new Map((draft?.lessons ?? []).map((lesson) => [lesson.id, lesson]))
@@ -3651,8 +3656,26 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
       <div className="lab-workspace">
         <div className="lab-workspace-toolbar"><div><input value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} aria-label="시안 이름" /></div><div>{canUndo && <button type="button" onClick={undo} title="Ctrl/⌘+Z"><RotateCcw size={14} /> 되돌리기</button>}<button type="button" onClick={() => setVirtualOpen(true)}><UserPlus size={14} /> 가상 학생</button><button type="button" onClick={() => setLessonEditor({ weekday: getTodayWeekday() })}><Plus size={14} /> 수업 추가</button><button type="button" className="danger" onClick={() => { if (window.confirm(`${draft.name} 시안을 삭제할까요?`)) onDeleteDraft(draft) }}><Trash2 size={14} /></button></div></div>
         <div className="lab-teacher-tabs"><button type="button" className={teacherFilter === 'all' ? 'active' : ''} onClick={() => setTeacherFilter('all')}>전체</button>{TEACHERS.map((teacher) => <button type="button" className={teacherFilter === teacher.id ? 'active' : ''} key={teacher.id} onClick={() => setTeacherFilter(teacher.id)}>{teacherNames[teacher.index]}</button>)}</div>
+        <div className="settings-time-range lab-display-range" role="group" aria-label="실험실 표시 시간">
+          <span className="settings-label">보이는 시간</span>
+          <select aria-label="실험실 표시 시작 시간" value={displayStart}
+            onChange={(event) => onChangeDisplayRange([Number(event.target.value), displayEnd])}>
+            {displayOptions.filter((minute) => minute < displayEnd).map((minute) => (
+              <option value={minute} key={minute}>{minutesToTime(minute)}</option>
+            ))}
+          </select>
+          <span>부터</span>
+          <select aria-label="실험실 표시 종료 시간" value={displayEnd}
+            onChange={(event) => onChangeDisplayRange([displayStart, Number(event.target.value)])}>
+            {displayOptions.filter((minute) => minute > displayStart).map((minute) => (
+              <option value={minute} key={minute}>{minutesToTime(minute)}</option>
+            ))}
+          </select>
+          <span>까지</span>
+          {hiddenByTime > 0 && <span className="lab-outside-time">{hiddenByTime}개 수업이 표시 시간 밖에 있습니다.</span>}
+        </div>
         {conflicts.length > 0 && <div className="lab-conflict-banner"><TriangleAlert size={17} /><span><strong>{conflicts.length}건의 시간 충돌</strong><small>{conflicts[0]?.message}</small></span></div>}
-        <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={settings} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
+        <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={{ ...settings, startMinute: displayStart, endMinute: displayEnd }} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
         <div className="lab-bottom-grid">
           <section className="lab-virtual-panel"><header><strong>가상 학생 연결</strong><span>{draft.virtualStudents.length}명</span></header>{draft.virtualStudents.map((student) => <div key={student.id}><Avatar student={draftStudentAsStudent(student)} size="sm" /><span><strong>{student.name}</strong><small>{student.school} {student.grade}</small></span><select value={draft.virtualMappings[student.id] ?? ''} onChange={(event) => updateDraft({ virtualMappings: { ...draft.virtualMappings, [student.id]: event.target.value } })}><option value="">실제 학생 미연결</option>{sortStudents(students, 'name').map((real) => <option value={real.id} key={real.id}>{real.name} · {real.grade}</option>)}</select><button type="button" onClick={() => { const used = draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id)); if (used) return; updateDraft({ virtualStudents: draft.virtualStudents.filter((item) => item.id !== student.id), virtualMappings: Object.fromEntries(Object.entries(draft.virtualMappings).filter(([id]) => id !== student.id)) }) }} disabled={draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id))}><Trash2 size={13} /></button></div>)}{draft.virtualStudents.length === 0 && <p>가상 학생이 없습니다. 등록 전 학생을 임시로 배치할 때 사용하세요.</p>}</section>
           <section className="lab-compare-panel"><header><div><GitCompare size={16} /><strong>시안 비교</strong></div><select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="live">현재 실제 시간표</option>{drafts.filter((item) => item.id !== draft.id).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></header><div><article><strong>{added.length}</strong><span>추가</span></article><article><strong>{changed.length}</strong><span>변경</span></article><article><strong>{removed.length}</strong><span>제외</span></article><article><strong>{conflicts.length}</strong><span>충돌</span></article></div><ul>{added.slice(0, 3).map((id) => <li key={`a-${id}`}><span className="added">추가</span>{draftMap.get(id)?.label}</li>)}{changed.slice(0, 3).map((id) => <li key={`c-${id}`}><span className="changed">변경</span>{draftMap.get(id)?.label}</li>)}{removed.slice(0, 3).map((id) => <li key={`r-${id}`}><span className="removed">제외</span>{compareMap.get(id)?.label}</li>)}</ul></section>
@@ -5208,6 +5231,7 @@ export default function App() {
             teacherNames={scheduleSettings.teacherNames}
             activeTeacherId={activeTeacherId}
             backupLabel={automaticBackup?.label}
+            onChangeDisplayRange={(labDisplayRange) => setScheduleSettings((current) => ({ ...current, labDisplayRange }))}
             onCreate={createLabDraft}
             onSaveDraft={saveLabDraft}
             onDeleteDraft={deleteLabDraft}

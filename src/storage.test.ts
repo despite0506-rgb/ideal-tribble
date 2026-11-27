@@ -16,6 +16,13 @@ describe('저장 자료 호환성', () => {
     expect(parseAppState({ ...DEMO_STATE, labDrafts: merged })?.labDrafts).toHaveLength(2)
   })
 
+  it('keeps a valid lab display range separate and drops invalid ranges', () => {
+    expect(parseScheduleSettings({ ...DEFAULT_SCHEDULE_SETTINGS, labDisplayRange: [540, 1080] }))
+      .toMatchObject({ startMinute: 780, endMinute: 1320, labDisplayRange: [540, 1080] })
+    expect(parseScheduleSettings({ ...DEFAULT_SCHEDULE_SETTINGS, labDisplayRange: [1080, 540] })?.labDisplayRange).toBeUndefined()
+    expect(parseScheduleSettings(DEFAULT_SCHEDULE_SETTINGS)?.labDisplayRange).toBeUndefined()
+  })
+
   it('출석 기능 추가 전 자료에는 빈 출석 기록을 채운다', () => {
     const {
       attendanceRecords: _attendanceRecords,

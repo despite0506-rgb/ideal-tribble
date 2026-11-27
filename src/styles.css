@@ -4342,6 +4342,16 @@ button.selected-student-chip {
 
 .lab-workspace { min-width: 0; overflow: hidden; }
 
+.lab-display-range {
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lab-outside-time {
+  color: var(--text-muted);
+}
+
 .lab-workspace-toolbar {
   display: flex;
   min-height: 61px;

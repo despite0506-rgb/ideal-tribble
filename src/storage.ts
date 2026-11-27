@@ -165,6 +165,10 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
   const studentGradeColors = gradeColors && typeof gradeColors === 'object' && !Array.isArray(gradeColors)
     ? Object.fromEntries(Object.entries(gradeColors).filter(([grade, color]) => /^(초[1-6]|[중고][1-3])$/.test(grade) && typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)))
     : {}
+  const range = settings.labDisplayRange
+  const labDisplayRange = Array.isArray(range) && range.length === 2
+    && Number.isInteger(range[0]) && Number.isInteger(range[1])
+    && range[0] >= 0 && range[1] <= 1440 && range[0] < range[1] ? range : undefined
   return {
     academyName: typeof settings.academyName === 'string' && settings.academyName.trim()
       ? settings.academyName.trim()
@@ -184,6 +188,7 @@ export function parseScheduleSettings(value: unknown): ScheduleSettings | null {
     showStudentAvatars: typeof settings.showStudentAvatars === 'boolean' ? settings.showStudentAvatars : true,
     showStudentNames: typeof settings.showStudentNames === 'boolean' ? settings.showStudentNames : true,
     studentGradeColors,
+    ...(labDisplayRange ? { labDisplayRange } : {}),
     density: settings.density === 'compact' ? 'compact' : 'comfortable',
   }
 }
