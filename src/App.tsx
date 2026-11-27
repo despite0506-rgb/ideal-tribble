@@ -326,15 +326,11 @@ function LessonCardContent({
   lesson,
   students,
   transportEnabled,
-  showStudentAvatars,
-  showStudentNames,
   dense = false,
 }: {
   lesson: Lesson
   students: Student[]
   transportEnabled: boolean
-  showStudentAvatars: boolean
-  showStudentNames: boolean
   dense?: boolean
 }) {
   const participants = lesson.participants
@@ -353,21 +349,16 @@ function LessonCardContent({
         </span>
       </div>
       <strong className="lesson-title">{lesson.label || '수업'}</strong>
-      {(showStudentAvatars || showStudentNames) && (
+      {participants.length > 0 && (
         <div className="lesson-people">
-          {showStudentAvatars && (
-            <span className="mini-avatars" aria-hidden="true">
-              {participants.map(({ student }) => <Avatar key={student.id} student={student} size="sm" />)}
-            </span>
-          )}
-          {showStudentNames && <span>{participants.map(({ student }) => student.name).join(' · ')}</span>}
+          {participants.map(({ student }) => <span key={student.id}>{student.name}</span>)}
         </div>
       )}
       {transportEnabled && (
         <div className={`lesson-rides${dense ? ' is-dense' : ''}`}>
           {participants.filter(({ participant }) => participant.transport.arrivalRide || participant.transport.departureRide).map(({ participant, student }) => (
             <span className="lesson-ride-row" key={student.id} title={`${student.name}: ${transportText(participant.transport)}`}>
-              {participants.length > 1 && showStudentNames && <span className="ride-name">{student.name.slice(-2)}</span>}
+              {participants.length > 1 && <span className="ride-name">{student.name.slice(-2)}</span>}
               <RidePills transport={participant.transport} compact />
             </span>
           ))}
@@ -507,8 +498,6 @@ function Timeline({
                         lesson={lesson}
                         students={students}
                         transportEnabled={settings.transportEnabled}
-                        showStudentAvatars={settings.showStudentAvatars}
-                        showStudentNames={settings.showStudentNames}
                         dense={(lesson.endMinute - lesson.startMinute) < 45}
                       />
                     </button>
@@ -531,8 +520,6 @@ function LessonList({
   selectedDay,
   onSelectDay,
   transportEnabled,
-  showStudentAvatars,
-  showStudentNames,
   mobileOnly = false,
   closures,
 }: {
@@ -543,8 +530,6 @@ function LessonList({
   selectedDay: Weekday
   onSelectDay: (day: Weekday) => void
   transportEnabled: boolean
-  showStudentAvatars: boolean
-  showStudentNames: boolean
   mobileOnly?: boolean
   closures: HolidayClosure[]
 }) {
@@ -610,8 +595,6 @@ function LessonList({
                       lesson={lesson}
                       students={students}
                       transportEnabled={transportEnabled}
-                      showStudentAvatars={showStudentAvatars}
-                      showStudentNames={showStudentNames}
                     />
                     <Pencil size={15} className="edit-hint" aria-hidden="true" />
                   </button>
@@ -5164,18 +5147,6 @@ export default function App() {
                       }}
                     />
                   </div>
-                  <div className="lesson-content-settings" aria-label="수업 카드 표시 설정">
-                    <Toggle
-                      label="학생 아이콘"
-                      checked={scheduleSettings.showStudentAvatars}
-                      onChange={(showStudentAvatars) => setScheduleSettings((current) => ({ ...current, showStudentAvatars }))}
-                    />
-                    <Toggle
-                      label="학생 이름"
-                      checked={scheduleSettings.showStudentNames}
-                      onChange={(showStudentNames) => setScheduleSettings((current) => ({ ...current, showStudentNames }))}
-                    />
-                  </div>
                   <fieldset className="weekend-setting density-setting">
                     <legend>화면 밀도</legend>
                     <div><button type="button" className={scheduleSettings.density === 'comfortable' ? 'active' : ''} onClick={() => setScheduleSettings((current) => ({ ...current, density: 'comfortable' }))}>편하게</button><button type="button" className={scheduleSettings.density === 'compact' ? 'active' : ''} onClick={() => setScheduleSettings((current) => ({ ...current, density: 'compact' }))}>좁게</button></div>
@@ -5198,10 +5169,10 @@ export default function App() {
                     {scheduleDisplay === 'timeline' ? (
                       <Timeline lessons={visibleLessons} students={appState.students} selectedStudentId={selectedStudentId} settings={scheduleSettings} closures={appState.holidayClosures} onOpenLesson={setAttendanceModalLessonId} onAddAt={(weekday) => openNewLesson(weekday)} onMoveLesson={moveLesson} />
                     ) : (
-                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                      <LessonList lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} closures={appState.holidayClosures} />
                     )}
                   </div>
-                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} showStudentAvatars={scheduleSettings.showStudentAvatars} showStudentNames={scheduleSettings.showStudentNames} closures={appState.holidayClosures} />
+                  <LessonList mobileOnly lessons={visibleLessons} students={appState.students} weekendMode={scheduleSettings.weekendMode} selectedDay={selectedDay} onSelectDay={setSelectedDay} onOpenLesson={setAttendanceModalLessonId} transportEnabled={scheduleSettings.transportEnabled} closures={appState.holidayClosures} />
                 </>
               )}
             </section>

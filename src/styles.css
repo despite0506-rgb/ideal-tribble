@@ -1207,37 +1207,6 @@ body.sidebar-resizing {
   white-space: nowrap;
 }
 
-.lesson-content-settings {
-  display: grid;
-  min-width: 122px;
-  gap: 2px;
-  padding-left: 15px;
-  border-left: 1px solid var(--border);
-}
-
-.lesson-content-settings .toggle-row {
-  min-height: 24px;
-  gap: 7px;
-  font-size: 9px;
-  white-space: nowrap;
-}
-
-.lesson-content-settings .toggle-ui {
-  width: 30px;
-  height: 18px;
-}
-
-.lesson-content-settings .toggle-ui > span {
-  top: 3px;
-  left: 3px;
-  width: 12px;
-  height: 12px;
-}
-
-.lesson-content-settings .toggle-row input:checked + .toggle-ui > span {
-  transform: translateX(12px);
-}
-
 .hidden-lessons-note {
   margin: 0 0 0 auto;
   color: #8a641e;
@@ -1566,32 +1535,18 @@ body.sidebar-resizing {
 
 .lesson-people {
   display: flex;
+  flex-wrap: wrap;
+  gap: 2px 5px;
+  margin-top: 3px;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.lesson-people > span {
   min-width: 0;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  color: #455c56;
-  font-size: 8px;
-  font-weight: 650;
-}
-
-.lesson-people > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-avatars {
-  display: inline-flex;
-  flex: 0 0 auto;
-  padding-left: 2px;
-}
-
-.mini-avatars .avatar {
-  width: 17px;
-  height: 17px;
-  margin-left: -3px;
-  font-size: 6px;
+  overflow-wrap: anywhere;
 }
 
 .lesson-rides {
@@ -1612,7 +1567,6 @@ body.sidebar-resizing {
   font-size: 7px;
 }
 
-.lesson-card[style*="height: 34"] .lesson-people,
 .lesson-card[style*="height: 34"] .lesson-rides {
   display: none;
 }
@@ -1625,6 +1579,11 @@ body.sidebar-resizing {
   margin-top: 1px;
   font-size: 8px;
   line-height: 1.05;
+}
+
+.lesson-card[style*="height: 34"] .lesson-people {
+  margin-top: 1px;
+  font-size: 8px;
 }
 
 .mobile-schedule {
@@ -1721,8 +1680,7 @@ body.sidebar-resizing {
 
 .lesson-list-card .lesson-time { font-size: 11px; }
 .lesson-list-card .lesson-title { margin-top: 5px; font-size: 13px; }
-.lesson-list-card .lesson-people { margin-top: 6px; font-size: 10px; }
-.lesson-list-card .mini-avatars .avatar { width: 22px; height: 22px; font-size: 7px; }
+.lesson-list-card .lesson-people { margin-top: 4px; font-size: 12px; }
 .lesson-list-card .lesson-rides { display: flex; margin-top: 8px; }
 .lesson-list-card .ride-pills-compact .ride-pill { min-height: 20px; padding: 2px 6px; font-size: 8px; }
 
@@ -4756,7 +4714,6 @@ button.selected-student-chip {
   .weekend-setting > div { width: 100%; }
   .weekend-setting button { flex: 1; }
   .transport-feature-setting { width: 100%; padding: 0; border-left: 0; }
-  .lesson-content-settings { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0; border-left: 0; }
   .weekday-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
