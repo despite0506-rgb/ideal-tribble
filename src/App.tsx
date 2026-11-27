@@ -750,6 +750,7 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
   const rosters = TEACHERS.map(({ id, index }) => ({
     id, name: teacherNames[index], members: students.filter((student) => rosterIds.get(id)?.has(student.id)),
   }))
+  const koreanTeacherId = rosters.find(({ name }) => /^윤지(?:t|쌤|선생님)?$/i.test(name.replace(/\s/g, '')))?.id ?? 'teacher-1'
   const unassigned = students.filter((student) => !scheduledIds.has(student.id) && !Object.values(getRosterTeachers(student)).some(Boolean))
   const endDrag = () => {
     pointer.current = null
@@ -815,11 +816,11 @@ function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, on
                   ))}
                 </div>
               )}
+              {id === koreanTeacherId && <KoreanStudentRoster students={koreanStudents} onOpenStudent={onOpenStudent} />}
             </section>
           )
         })}
       </div>
-      <KoreanStudentRoster students={koreanStudents} onOpenStudent={onOpenStudent} />
       {dragged && (
         <div className="roster-drop-tray" aria-hidden="true">
           {rosters.map(({ id, name }) => (
@@ -836,8 +837,8 @@ function KoreanStudentRoster({ students, onOpenStudent }: {
   onOpenStudent: (studentId: string) => void
 }) {
   return (
-    <section className="grade-group teacher-roster-section korean-roster" aria-labelledby="korean-roster-title">
-      <header className="grade-group-head"><h3 id="korean-roster-title">윤지T 국어 학생<span>{students.length}명</span></h3></header>
+    <section className="korean-roster" aria-labelledby="korean-roster-title">
+      <header className="grade-group-head"><h4 id="korean-roster-title">국어 학생 <span>{students.length}명</span></h4></header>
       {students.length === 0 ? <p>표시할 국어 학생이 없습니다.</p> : (
         <div className="roster-grade-groups">
           {groupStudentsByGrade(students).map(({ label, students: classmates }) => (
