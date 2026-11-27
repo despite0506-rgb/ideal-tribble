@@ -2166,11 +2166,6 @@ function LessonModal({
   }
   const toggleWeekday = (weekday: Weekday) => {
     setErrors([])
-    if (lesson) {
-      setSelectedWeekdays([weekday])
-      setWeekdayTimes((times) => ({ ...times, [weekday]: times[weekday] ?? { start, end } }))
-      return
-    }
     if (selectedWeekdays.includes(weekday)) {
       setSelectedWeekdays((current) => current.filter((day) => day !== weekday))
       return
@@ -2187,7 +2182,9 @@ function LessonModal({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    const groupSeriesId = kind === 'group' ? (lesson?.groupSeriesId ?? createId('group')) : undefined
+    const groupSeriesId = kind === 'group'
+      ? (lesson?.kind === 'group' ? lesson.groupSeriesId ?? lesson.id : createId('group'))
+      : undefined
     const sharedDraft: Omit<LessonDraft, 'weekday' | 'startMinute' | 'endMinute' | 'participants'> = {
       kind,
       groupSeriesId,
@@ -2238,17 +2235,19 @@ function LessonModal({
       setErrors([...new Map(nextErrors.map((issue) => [issue.conflictingLessonId ?? issue.message, issue])).values()])
       return
     }
-    const createdAt = lesson?.createdAt ?? new Date().toISOString()
+    const existingWeekday = lesson && selectedWeekdays.includes(lesson.weekday) ? lesson.weekday : selectedWeekdays[0]
+    const createdAt = new Date().toISOString()
     onSave(selectedWeekdays.map((weekday) => {
       const time = weekdayTimes[weekday] ?? { start, end }
+      const existingLesson = weekday === existingWeekday ? lesson : undefined
       return {
         ...sharedDraft,
         weekday,
         startMinute: timeToMinutes(time.start),
         endMinute: timeToMinutes(time.end),
         participants: participantsForWeekday(weekday),
-        id: lesson?.id ?? createId('lesson'),
-        createdAt,
+        id: existingLesson?.id ?? createId('lesson'),
+        createdAt: existingLesson?.createdAt ?? createdAt,
       }
     }))
   }
@@ -2331,7 +2330,7 @@ function LessonModal({
           </fieldset>
           <fieldset className="weekday-picker">
             <legend>
-              요일 <em>필수 · {lesson ? '한 개 선택' : '여러 개 선택 가능'}</em>
+              요일 <em>필수 · 여러 개 선택 가능</em>
               <strong>{selectedWeekdays.length}개 선택</strong>
             </legend>
             <div className="weekday-options">
