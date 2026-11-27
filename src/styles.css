@@ -5074,6 +5074,10 @@ button.selected-student-chip {
   }
 }
 
+.teacher-roster .korean-roster {
+  margin-top: 8px;
+}
+
 .teacher-roster-section .grade-group-head {
   min-height: 30px;
   margin-bottom: 5px;

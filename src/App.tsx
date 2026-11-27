@@ -717,8 +717,9 @@ function StudentQuickLinks({
   )
 }
 
-function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onMove }: {
+function StudentsByTeacher({ students, koreanStudents, lessons, teacherNames, onOpenStudent, onMove }: {
   students: Student[]
+  koreanStudents: Student[]
   lessons: Lesson[]
   teacherNames: ScheduleSettings['teacherNames']
   onOpenStudent: (id: string) => void
@@ -818,6 +819,7 @@ function StudentsByTeacher({ students, lessons, teacherNames, onOpenStudent, onM
           )
         })}
       </div>
+      <KoreanStudentRoster students={koreanStudents} onOpenStudent={onOpenStudent} />
       {dragged && (
         <div className="roster-drop-tray" aria-hidden="true">
           {rosters.map(({ id, name }) => (
@@ -834,25 +836,23 @@ function KoreanStudentRoster({ students, onOpenStudent }: {
   onOpenStudent: (studentId: string) => void
 }) {
   return (
-    <section className="student-quick-panel teacher-roster" aria-labelledby="korean-roster-title">
-      <header><h2 id="korean-roster-title">윤지T 국어 학생 · {students.length}명</h2></header>
-      <div className="grade-group teacher-roster-section">
-        {students.length === 0 ? <p>표시할 국어 학생이 없습니다.</p> : (
-          <div className="roster-grade-groups">
-            {groupStudentsByGrade(students).map(({ label, students: classmates }) => (
-              <ul key={label} className="roster-student-grid" aria-label={label}>
-                {classmates.map((student) => (
-                  <li key={student.id}>
-                    <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
-                      <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ))}
-          </div>
-        )}
-      </div>
+    <section className="grade-group teacher-roster-section korean-roster" aria-labelledby="korean-roster-title">
+      <header className="grade-group-head"><h3 id="korean-roster-title">윤지T 국어 학생<span>{students.length}명</span></h3></header>
+      {students.length === 0 ? <p>표시할 국어 학생이 없습니다.</p> : (
+        <div className="roster-grade-groups">
+          {groupStudentsByGrade(students).map(({ label, students: classmates }) => (
+            <ul key={label} className="roster-student-grid" aria-label={label}>
+              {classmates.map((student) => (
+                <li key={student.id}>
+                  <button type="button" className="student-quick-button" onClick={() => onOpenStudent(student.id)}>
+                    <span className="roster-grade" data-grade={label}>({label})</span><span>{student.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -5226,7 +5226,7 @@ export default function App() {
                   onToggleTeacher={toggleTeacherHighlight}
                   onOpenStudent={showStudentDetail}
                 />
-              : <StudentsByTeacher students={mathPageStudents} lessons={mathLessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
+              : <StudentsByTeacher students={mathPageStudents} koreanStudents={koreanPageStudents} lessons={mathLessons} teacherNames={scheduleSettings.teacherNames} onOpenStudent={showStudentDetail} onMove={moveStudent} />}
             {pageStudents.length === 0 ? (
               <div className="empty-state card"><span><UsersRound size={28} /></span><h3>학생이 없습니다</h3><p>새 학생을 등록해 시간표 관리를 시작하세요.</p><button type="button" className="button primary" onClick={() => setBulkStudentModalOpen(true)}><Plus size={16} /> 학생 등록</button></div>
             ) : mathPageStudents.length > 0 && (
@@ -5253,7 +5253,6 @@ export default function App() {
                 })}
               </div>
             )}
-            <KoreanStudentRoster students={koreanPageStudents} onOpenStudent={showStudentDetail} />
           </section>
         ) : detailStudent ? (
           <StudentDetail
