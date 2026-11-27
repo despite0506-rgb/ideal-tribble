@@ -278,11 +278,11 @@ function sortStudents(students: Student[], mode: StudentSortMode): Student[] {
   return [...students].sort((a, b) => a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' }))
 }
 
-function Avatar({ student, size = 'md', foreground }: { student: Student; size?: 'sm' | 'md' | 'lg'; foreground?: string }) {
+function Avatar({ student, size = 'md' }: { student: Student; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <span
       className={`avatar avatar-${size}`}
-      style={{ '--avatar-color': student.color, color: foreground } as CSSProperties}
+      style={{ '--avatar-color': student.color } as CSSProperties}
       aria-hidden="true"
     >
       {initials(student.name)}
@@ -5287,8 +5287,13 @@ export default function App() {
                   return (
                     <article className="student-card" key={student.id}>
                       <header>
-                        <Avatar student={{ ...student, color: gradeColor }} size="lg" foreground={gradeTextColor(gradeColor)} />
-                        <div><div className="student-card-name"><h2>{student.name}</h2><StudentSubjectTag student={student} lessons={appState.lessons} /></div><p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p></div>
+                        <div>
+                          <div className="student-card-name">
+                            <h2 style={{ backgroundColor: gradeColor, color: gradeTextColor(gradeColor) }}>{student.name}</h2>
+                            <StudentSubjectTag student={student} lessons={appState.lessons} />
+                          </div>
+                          <p>{[student.school, student.grade].filter(Boolean).join(' · ') || '학교 정보 미등록'} · {student.enrollmentStatus === 'active' ? '재원' : student.enrollmentStatus === 'paused' ? '휴원' : '퇴원'}</p>
+                        </div>
                         <button type="button" className="icon-button" onClick={() => setStudentModal({ open: true, studentId: student.id })} aria-label={`${student.name} 정보 수정`}><Pencil size={17} /></button>
                       </header>
                       <div className="student-card-stats">

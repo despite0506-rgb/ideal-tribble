@@ -2524,9 +2524,12 @@ body.sidebar-resizing {
   flex: 1;
 }
 
-.student-card h2 {
+.student-card-name > h2 {
   margin: 0;
+  padding: 3px 7px;
+  border-radius: 5px;
   font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
 .student-card-name { flex-wrap: wrap; }
@@ -5100,8 +5103,7 @@ button.selected-student-chip {
   text-shadow: none;
 }
 
-.student-grade-colors .student-quick-button,
-.student-card > header > .avatar {
+.student-grade-colors .student-quick-button {
   color: var(--text);
   text-shadow: none;
 }
