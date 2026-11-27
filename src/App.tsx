@@ -123,6 +123,7 @@ type LessonTimeValue = {
 }
 
 const PIXELS_PER_MINUTE = 1.6
+const LAB_TIMELINE_MINIMUM_HEIGHT_MINUTES = 9 * 60
 const TEN_MINUTE_OPTIONS = Array.from({ length: 24 * 6 }, (_, index) => index * 10)
 const LAB_DISPLAY_TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => index * 30)
 const DISPLAY_TIME_OPTIONS = Array.from({ length: 17 }, (_, index) => (7 + index) * 60)
@@ -402,6 +403,7 @@ function Timeline({
   students,
   selectedStudentId,
   settings,
+  minimumHeightMinutes = 0,
   onOpenLesson,
   onAddAt,
   closures,
@@ -411,6 +413,7 @@ function Timeline({
   students: Student[]
   selectedStudentId: Selection
   settings: ScheduleSettings
+  minimumHeightMinutes?: number
   onOpenLesson: (lessonId: string) => void
   onAddAt: (weekday: Weekday) => void
   closures: HolidayClosure[]
@@ -419,8 +422,13 @@ function Timeline({
   const columns = getScheduleColumns(settings.weekendMode)
   const start = settings.startMinute
   const end = settings.endMinute
-  const pixelsPerMinute = settings.density === 'compact' ? Math.max(.7, PIXELS_PER_MINUTE * .72) : PIXELS_PER_MINUTE
-  const height = (end - start) * pixelsPerMinute
+  const basePixelsPerMinute = settings.density === 'compact' ? Math.max(.7, PIXELS_PER_MINUTE * .72) : PIXELS_PER_MINUTE
+  const visibleMinutes = end - start
+  const layoutMinutes = minimumHeightMinutes > 0
+    ? Math.max(minimumHeightMinutes, Math.sqrt(minimumHeightMinutes * visibleMinutes))
+    : visibleMinutes
+  const height = layoutMinutes * basePixelsPerMinute
+  const pixelsPerMinute = height / visibleMinutes
   const timeTicks = Array.from({ length: Math.floor((end - start) / 30) + 1 }, (_, index) => start + index * 30)
   const today = getTodayWeekday()
   const gridStyle = {
@@ -3542,8 +3550,6 @@ function findLabConflicts(lessons: Lesson[], students: Student[]): LabConflict[]
       if (sharedIds.length > 0) {
         const names = sharedIds.map((id) => studentById(students, id)?.name ?? '가상 학생').join(' · ')
         conflicts.push({ firstId: first.id, secondId: second.id, message: `${names} 학생의 ${minutesToTime(first.startMinute)} 수업이 겹칩니다.` })
-      } else if (first.teacherId === second.teacherId) {
-        conflicts.push({ firstId: first.id, secondId: second.id, message: `${TEACHERS.find((teacher) => teacher.id === first.teacherId)?.index !== undefined ? '같은 선생님' : '선생님'}의 ${minutesToTime(first.startMinute)} 수업이 겹칩니다.` })
       }
     }
   }
@@ -3675,7 +3681,7 @@ function ScheduleLabPage({ drafts, liveLessons, students, settings, teacherNames
           {hiddenByTime > 0 && <span className="lab-outside-time">{hiddenByTime}개 수업이 표시 시간 밖에 있습니다.</span>}
         </div>
         {conflicts.length > 0 && <div className="lab-conflict-banner"><TriangleAlert size={17} /><span><strong>{conflicts.length}건의 시간 충돌</strong><small>{conflicts[0]?.message}</small></span></div>}
-        <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={{ ...settings, startMinute: displayStart, endMinute: displayEnd }} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
+        <div className="lab-timeline-wrap"><div className="lab-watermark-bg" aria-hidden="true">연습용 · 실제 미반영</div><Timeline lessons={shownLessons.map((lesson) => conflictIds.has(lesson.id) ? { ...lesson, color: '#e46a61', colorMode: 'custom' } : lesson)} students={allStudents} selectedStudentId="all" settings={{ ...settings, startMinute: displayStart, endMinute: displayEnd }} minimumHeightMinutes={LAB_TIMELINE_MINIMUM_HEIGHT_MINUTES} closures={[]} onOpenLesson={(lessonId) => setLessonEditor({ lessonId })} onAddAt={(weekday) => setLessonEditor({ weekday })} onMoveLesson={(lessonId, weekday, startMinute) => { const lesson = draft.lessons.find((item) => item.id === lessonId); if (!lesson) return; pushUndo(); const duration = lesson.endMinute - lesson.startMinute; const safeStart = Math.min(startMinute, 1440 - duration); const delta = safeStart - lesson.startMinute; updateDraft({ lessons: draft.lessons.map((item) => item.id === lessonId ? { ...item, weekday, startMinute: safeStart, endMinute: safeStart + duration, participants: item.participants.map((participant) => ({ ...participant, transport: { ...participant.transport, arrivalMinute: Number.isInteger(participant.transport.arrivalMinute) ? Number(participant.transport.arrivalMinute) + delta : participant.transport.arrivalMinute, departureMinute: Number.isInteger(participant.transport.departureMinute) ? Number(participant.transport.departureMinute) + delta : participant.transport.departureMinute } })) } : item) }) }} /></div>
         <div className="lab-bottom-grid">
           <section className="lab-virtual-panel"><header><strong>가상 학생 연결</strong><span>{draft.virtualStudents.length}명</span></header>{draft.virtualStudents.map((student) => <div key={student.id}><Avatar student={draftStudentAsStudent(student)} size="sm" /><span><strong>{student.name}</strong><small>{student.school} {student.grade}</small></span><select value={draft.virtualMappings[student.id] ?? ''} onChange={(event) => updateDraft({ virtualMappings: { ...draft.virtualMappings, [student.id]: event.target.value } })}><option value="">실제 학생 미연결</option>{sortStudents(students, 'name').map((real) => <option value={real.id} key={real.id}>{real.name} · {real.grade}</option>)}</select><button type="button" onClick={() => { const used = draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id)); if (used) return; updateDraft({ virtualStudents: draft.virtualStudents.filter((item) => item.id !== student.id), virtualMappings: Object.fromEntries(Object.entries(draft.virtualMappings).filter(([id]) => id !== student.id)) }) }} disabled={draft.lessons.some((lesson) => lesson.participants.some((participant) => participant.studentId === student.id))}><Trash2 size={13} /></button></div>)}{draft.virtualStudents.length === 0 && <p>가상 학생이 없습니다. 등록 전 학생을 임시로 배치할 때 사용하세요.</p>}</section>
           <section className="lab-compare-panel"><header><div><GitCompare size={16} /><strong>시안 비교</strong></div><select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="live">현재 실제 시간표</option>{drafts.filter((item) => item.id !== draft.id).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></header><div><article><strong>{added.length}</strong><span>추가</span></article><article><strong>{changed.length}</strong><span>변경</span></article><article><strong>{removed.length}</strong><span>제외</span></article><article><strong>{conflicts.length}</strong><span>충돌</span></article></div><ul>{added.slice(0, 3).map((id) => <li key={`a-${id}`}><span className="added">추가</span>{draftMap.get(id)?.label}</li>)}{changed.slice(0, 3).map((id) => <li key={`c-${id}`}><span className="changed">변경</span>{draftMap.get(id)?.label}</li>)}{removed.slice(0, 3).map((id) => <li key={`r-${id}`}><span className="removed">제외</span>{compareMap.get(id)?.label}</li>)}</ul></section>
